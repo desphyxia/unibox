@@ -369,7 +369,7 @@ These are **targets to test**, derived from the numbers above.
 - Whether the **hospital and the mall are free now** (conflicting evidence).
 - What the **sparkle** HUD button does (a red-dot button next to the cart). N3 shows a news panel opening after it, so a news/events button is likely but not proven.
 - The Fandom wiki and any official catalog: not reachable here.
-- Avatar World: a separate pass, not started.
+- Avatar World: done separately, see `docs/avatar-world-findings.md`; the cross-game summary is `docs/reference-games-comparison.md`.
 
 ## Appendix A: per-video notes (new videos)
 

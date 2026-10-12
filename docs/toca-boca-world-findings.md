@@ -3,7 +3,7 @@
 Status as of 2026-10-12. Pass 1 (frames only, sections 3-8) and Pass 2 (audio transcription, section 9) are both complete. Section 9 also lists corrections to Pass 1. Counts, prices, time shares, reviews and outside sources for 40 videos are in `docs/toca-boca-world-quantified.md`.
 
 ## 1. Purpose and scope
-Identify the key gameplay elements of Toca Boca World from gameplay videos, so the most important aspects can inform the unicorn sanctuary game (see `docs/concept-state.md`). This covers Toca Boca World only; Avatar World is a later pass.
+Identify the key gameplay elements of Toca Boca World from gameplay videos, so the most important aspects can inform the unicorn sanctuary game (see `docs/concept-state.md`). This covers Toca Boca World only; Avatar World is in `docs/avatar-world-findings.md` and the cross-game summary is `docs/reference-games-comparison.md`.
 
 ## 2. Method and limits
 - **15 videos** chosen to cover: first-time play, walkthroughs, one long child play session, update showcases, shop and economy, a parent review, a monetization critique, and tutorials.
