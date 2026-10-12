@@ -117,6 +117,16 @@ These supersede earlier open items where they conflict.
 - **Android:** research Google Play Families and Android compliance **after the iOS prototype**, when a store build is planned.
 - **Art mood:** not chosen; **make a few quick style samples first** (soft pastel, bold graphic, painterly storybook) and pick from them.
 
+### 12c. Third interview round (2026-10-12): prototype content
+- **Creature kinds:** 3-4 (a mix in which unicorns are one example).
+- **Breeding traits:** colour and pattern, horn/wings/tail shape, mane and hair style, and temperament (a mood tendency that changes how the creature acts, linking breeding to care).
+- **Island play:** a few simple decor items, a few distinct places to visit, and dressing and styling creatures. (Watching the world change is not a separate activity, but the reactive island-time world stays a must-keep.)
+- **Storybook:** a running **life story per creature, egg to guardian**, templated, in the parent-gated area.
+- **Scope rule: a thin slice of each.** Keep the breadth, go shallow: about 3 creature kinds, 2 places, about 12 decor items, a handful of outfits, 3 life stages, and one weather and season pair. Prove the loop before adding depth. Four trait types across 3 kinds is the multiplier to watch.
+- **Needs and moods to build in the visible-needs variant:** hunger and thirst, sleep and energy, affection and play. Comfort in weather is not in the first build.
+- **Parent area (behind the gate):** storybook, purchases and restore, play controls (sound, rest reminders, optional session limit), privacy and data with a delete-all-progress button. The prototype is not shipped, so purchases and restore can be stubbed until a store build.
+- **Audio:** creature sounds and music, **no narrator**; nothing to translate and no voice talent needed.
+
 **New open items from these answers**
 - **Android compliance** (Google Play Families policy, data safety, an Android age-gate pattern) has not been researched; only Apple's Kids Category and COPPA were checked. Scheduled after the iOS prototype (12b).
 - **Teaching the clock with island-time:** resolved in 12b (sun-and-moon arc plus an optional analog clock, labelled island time); watch in playtests for confusion with real time.
