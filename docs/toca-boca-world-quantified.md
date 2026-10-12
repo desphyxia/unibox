@@ -19,7 +19,7 @@ Section 8 lists where they agree and conflict. Section 9 turns the numbers into 
 | So what share is free at the start? | Roughly **8-12% of locations** and **about 8% of characters**. Furniture is harder to say. | Low-medium. Different counting units; free drops keep adding to the free side. |
 | What does it cost to own everything? | **$199.99 list** for the World Bundle (Apr 2026), shown as **$84.99** to a player who already owned part of it. A creator put her 2023 total at about $200. Single packs run **$0.99-$13.99**. | Medium-high for the card prices (read from frames); the totals are one creator's. |
 | What is capped on the free tier? | **3 saved-character slots**; the paid Character Creator upgrade ($4.99 in 2023, $7.99 in 2022) raises it to **30**. | Medium-high. Four independent mentions. |
-| How do players spend their time? | Pooled over 11 time-coded sessions (430 min): **44% building/decorating, 34% role-play in locations, 10% character creator, 5% map, 3% Post Office, 2% shop browsing, 2% loading.** The one child session (84 min): **58% play, 20% creator, 8% map, 5% build.** | Medium for the shares, low for generalising: the sample leans toward building videos. |
+| How do players spend their time? | Pooled over 11 time-coded sessions (430 min): **44% building/decorating, 34% role-play in locations, 10% character creator, 5% map, 3% Post Office, 2% shop browsing, 2% loading.** The one long child session (V6, 84 min): **58% play, 20% creator, 8% map, 5% build.** Five child-play sessions together (144 min, see 5.1a): **63% play, 16% creator, 7% map, 6% Post Office, 3% build.** | Medium for the shares, low for generalising: the sample leans toward building videos, and only V6 is a child playing alone for a long time. |
 | How often is there new content? | Free Post Office gifts **every Friday**; an official news post about **every 2 weeks** (4 dated posts in the 60 days before 2026-10-06); at least one **free location** in the last 3 months (Flipside Park, Aug 2026). | Medium-high. |
 | What do players complain about most? | In 500 App Store reviews from 8-10 Oct 2026: **price/"make more free" about 1 in 5**, **bugs/crashes about 1 in 5**, **lost progress or purchases about 1 in 8**. The reviews skew positive (65% five-star). | Medium. Keyword coding is approximate (see 6.3). |
 | Is there anything like needs, moods, breeding, a storybook, or goals? | **No** in any of the 40 videos. Exception: some locations hold small scored mini-games (arcade, a pool timer). | High for these videos. |
@@ -38,7 +38,7 @@ Section 8 lists where they agree and conflict. Section 9 turns the numbers into 
 
 **Known biases.**
 - Creators choose what to film. The sample over-represents decorating (several videos exist to show a build) and under-represents shopping, because buying is rarely filmed except by "buy everything" creators.
-- Only **one** video is a real child playing for a long stretch (V6). The other two child-related videos are a parent-guided family channel (2020) and a scripted skit. So "how children spend their time" rests on a sample of one.
+- Only **one** video is a real child playing alone for a long stretch (V6). A second search round (3.4) added one more child on camera with a parent (C1) and two screen-only videos whose titles give a child's age (C2, C3) that I cannot verify. So "how children spend their time" rests on five sessions, of which one is long and unassisted.
 - The game changed a lot from 2018 to 2026. Prices, the shop UI and free content differ by date; every figure below carries its date.
 - Frame coding is my judgement. The check above bounds that, it does not remove it.
 
@@ -79,7 +79,26 @@ Metadata is in `docs/data/toca-videos-new25.csv`. Short form:
 | N25 | Location tour | Map fly-over with everything built | 2025-01 | 3:04 |
 
 ### 3.3 What I could not find
-Real children playing and recording themselves are rare in search results. Most "kid" results are role-play story channels made by older children or teens, which are scripted and not what a 4-10-year-old does in a first session. Treat all child-related numbers as thin.
+Real children playing and recording themselves are rare in search results. Most "kid" results are role-play story channels made by older children or teens, which are scripted and not what a 4-10-year-old does in a first session. Treat all child-related numbers as thin. A second round is in 3.4.
+
+### 3.4 Second search round: more children playing (2026-10-12)
+Request: find more videos with a child playing. I ran 59 YouTube searches (age phrases such as "5 / 6 / 7 / 8 year old", "my son", "my daughter", "kids react", "with my kids", "toddler", under both "Toca Boca World" and the older "Toca Life World"). Most hits are voiced role-play story channels or Roblox creators; the title never says who is playing. I screened 12 candidates by description, contact sheets and a Whisper transcript. Verdicts per video are in `docs/data/toca-child-videos-round2.csv`.
+
+| ID | Date | Min | What the evidence for a child is | Use |
+|---|---|---|---|---|
+| C1 Caleb Kids Show | 2021-02 | 12.6 | Child and mother visible on a webcam inset; first time playing on a tablet | Time-coded; behaviour notes below |
+| C2 "played by a five year old girl" | 2023-02 | 17.9 | Title and description only; no clear speech | Time-coded, age unverified |
+| C3 "7 years old plays" | 2022-10 | 5.7 | Title only; no speech | Time-coded, age unverified |
+| C4 Kin Tin Plays | 2024-10 | 10.2 | Child on face camera, but an edited, scripted vampire-mansion story | Qualitative only |
+| 8 others | 2026 mostly | n/a | No age evidence, under a minute long, or scripted voiced stories | Excluded |
+
+What the added child videos show:
+- **C1 (mother-guided, first time, 12.6 min):** 79% play, 10% map, 5% loading. No character creation. The mother and child take turns steering and the mother names roles ("you're the sister"): cooking and serving dinner, shower and tooth brushing, bed, a cinema and a stage band (picking instruments), a hair salon (haircut and colour change). They looked for a dentist, did not find one, and went to the cat place instead. Everything is **family routine and role assignment**, in about 6 locations in 12 minutes.
+- **C2 (age unverified, 17.9 min):** a third of the time in the character creator (6 minutes, one character), 39% at the Post Office (a Valentine's-themed one, Feb 2023), little free play. This one looks like a child exploring features rather than telling a story.
+- **C3 (age unverified, 5.7 min):** all of it in a single apartment, with no map, creator or shop visit.
+- **C4 (scripted):** the player sets a goal for themselves (find paintings to escape) inside a Halloween location. That is a **self-made quest**: the game supplies the place and props; the story is added by the player.
+
+Limits: C2 and C3 ages come from the uploader's title; I could not confirm them. C1 is from 2021 and its parent steers the play. C1-C3 were frame-coded once with a coarse 20-60 s step and were **not** part of the blind re-label test, so treat their shares as rough (one frame is about 5-6% of each video's length). The second round did not find a single new video of a child under about six playing alone.
 
 ## 4. Content: what is free, what is paid
 
@@ -170,6 +189,20 @@ What to take from it:
 - **Shop time is small** (2% pooled), but it is concentrated: it appears only in the one livestream, where the creator used the shop as a **catalog** to find which pack contains an item (about 9 min). That is shop-as-reference, not shop-as-buying.
 - **Loading is visible overhead** in the first-run video V4: 22% of its 14.8 minutes are loading vignettes (about one per 80 seconds). Later builds are lighter: 2-4%.
 - **Longest unbroken stays:** V6's child stayed 8-12 minutes in one location several times (Krill Grill, waterfront, boat and reef, night waterfront). Role-play videos switch location roughly every 2.5-3 minutes (V5: 9 locations in 26.5 min; N2: 6 in 17 min).
+
+### 5.1a Child-play sessions only (5 sessions, 144 min)
+Same coding as 5.1. V6 and N15 are in the table above; C1-C3 come from the second search round (3.4) and are reported here rather than pooled into the 11-session figures.
+
+| Session | Min | Who | Play | Build | Creator | Map | Post Office | Load/other |
+|---|---|---|---|---|---|---|---|---|
+| V6 | 84.0 | child alone, narrated | 58% | 5% | 20% | 8% | 2% | 6% |
+| N15 (2020) | 23.7 | children about 2 and 5 with parents | 99% | 0 | 0 | 1% | 0 | 0 |
+| C1 (2021) | 12.7 | child with mother, narrated | 79% | 0 | 0 | 10% | 0 | 11% |
+| C2 (2023) | 18.0 | stated age 5, screen only | 11% | 6% | 33% | 6% | 39% | 6% |
+| C3 (2022) | 5.7 | stated age 7, screen only | 100% | 0 | 0 | 0 | 0 | 0 |
+| **All five** | **144.0** | | **63%** | **3%** | **16%** | **7%** | **6%** | **5%** |
+
+Read this as: children spend most of their time **in locations** (play 63%), very little building (3%, versus 58% in the nine other coded sessions, 323 min), and a notable share in the **character creator** (16%). The spread between sessions is large (play 11% to 100%), so the pooled number mostly reflects the long V6 session. Do not quote 63% as "what a child does"; quote the contrast with building and the creator share.
 
 ### 5.2 Variety of things to do
 I grouped what players do in locations into **20 activity families**: cooking/serving food, hygiene (toilet, shower, hair wash), rest and TV, shopping/ATM/photo booth, music and stage, sport and rides (skate, ice, pool, water park, amusement), pet care, baby/doctor/hospital care, gardening/farming, fishing/diving/boats, dress-up/salon/spa, school and classroom, crafts (painting, knitting), travel (airport, train), scored mini-games, photography/film recording, hidden secrets and collectibles, home building/decorating, character creation, and gift unboxing. I did not build a per-video presence matrix, so I can say "at least these 20 exist" but not how often each appears.
@@ -320,7 +353,7 @@ These are **targets to test**, derived from the numbers above.
 1. **Free island size.** Toca's free start is about 8-11 locations out of about 90-100 (roughly 10%), and that is enough for a new player to reach a free gift and a free location within 3-7 minutes. Your first island can be much smaller if each location is deep (Toca's hospital has 5 floors and 30 characters). Set a floor of "enough for the first week", not a percentage.
 2. **Cap the right thing.** Toca caps **saved characters at 3** on the free tier, not play. V6 shows a child doing a lot with three characters. For your game the equivalent is how many creatures a child can keep; a small cap that is easy to understand fits a 4-year-old and is a clear, non-manipulative upgrade. Check this against your "first island free and complete" promise, since a cap on creatures may feel like a missing feature.
 3. **Plan for two play styles.** In 11 sessions, building took 31-44% of time and role-play 34-46%, with very different individual mixes. Your Builder mode and your pet-care loop should each be able to carry a session on their own. A session of 5-20 minutes (the reviews' "5 to 30 minute rounds") is a better design target than the 60-minute creator videos.
-4. **Make the creator the keystone.** It is 9-10% of pooled time but 20% of the child's session, it is revisited in the middle of stories, and it is the first thing a new player does. In your game that is the creature creator and, later, breeding preview.
+4. **Make the creator the keystone.** It is 9-10% of pooled time but 20% of V6's session (16% across the five child sessions), it is revisited in the middle of stories, and it is the first thing a new player does. In your game that is the creature creator and, later, breeding preview.
 5. **Do not hide loading in the first minutes.** V4 spent 22% of its first 15 minutes in loading vignettes. Toca fills those with mascot animations; if you load between islands, budget for that.
 6. **Treat lost progress as the top risk.** It is the lowest-rated recurring theme in the review sample and the most emotional ("everything reset"). Design saves, recovery and restore first; consider a "found things" shelf like Toca's new Lost & Found. This also supports your plan for purchases restored across devices.
 7. **No visible locks in the main world.** The new greyed-out map draws anger; and mixing free and paid items in one location confuses (earlier doc). Show only what the child owns, and put anything for sale in a separate parent-gated place, outside the creative flow.
@@ -330,7 +363,7 @@ These are **targets to test**, derived from the numbers above.
 
 ## 10. What is still unknown
 
-- True **time on each activity for young children**: only one child session exists in the sample.
+- True **time on each activity for young children**: five child-play sessions exist, only one of them long and unassisted (V6), and none is verified as a child aged 4-6 playing alone. Finding that needs a recorded playtest of your own, not more YouTube.
 - **Retention, session counts per day, conversion and spend per payer** are not observable from videos or reviews. The market estimates are inconsistent.
 - The **exact free-content counts today**: no official figure; the closest are 2024 and 2022 reviews.
 - Whether the **hospital and the mall are free now** (conflicting evidence).
@@ -361,4 +394,5 @@ Time-coded videos are in section 5.1. Short notes on the rest:
 
 ## Appendix B: files
 - `docs/data/toca-videos-new25.csv`: IDs, channels, dates, lengths, groups.
-- `docs/data/toca-time-coding.csv`: frame counts and minutes per activity for the 11 time-coded sessions.
+- `docs/data/toca-time-coding.csv`: frame counts and minutes per activity for the 11 time-coded sessions plus the three added child sessions (C1-C3).
+- `docs/data/toca-child-videos-round2.csv`: the 12 candidate child-play videos from the second search, with the evidence and the verdict for each.
