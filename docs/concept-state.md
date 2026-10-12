@@ -1,6 +1,6 @@
 # Unicorn Sanctuary: Concept State
 
-Status as of 2026-10-11. Research and concept only; no design, code or art has started.
+Status as of 2026-10-12. Research and concept only; no design, code or art has started. Reference-game research is in `docs/toca-boca-world-findings.md`, `docs/toca-boca-world-quantified.md`, `docs/avatar-world-findings.md` and the cross-game summary `docs/reference-games-comparison.md`. Section 12 holds the decisions from the 2026-10-12 interview.
 
 ## 1. What this is
 A mobile game (iOS first) for children aged 4-10, in the sandbox space of Toca Boca World and Avatar World. Working title: none yet (not chosen or cleared).
@@ -69,10 +69,58 @@ App Store optimization and editorial features, parenting and child-safety review
 
 ## 10. Revisit later
 - **Breeding vs. genetics:** deterministic trait choice may not teach real inheritance patterns.
-- **Real-time weather and seasons:** device clock vs. the child's location. Location data is a COPPA and Apple privacy problem.
+- **Real-time weather and seasons:** resolved 2026-10-12: island-time, independent of real time and location (see section 12).
 
 ## 11. Open items
-- **"Little mode":** undecided whether to have one. Neither reference game does. Options: drop it and use a single mode that deepens with use, with Builder mode as an unlockable layer.
-- Final theme, working title, engine and art style.
-- Timelines and budget.
+- **"Little mode":** resolved 2026-10-12: no separate Little mode; one mode that deepens with use, Builder mode as a later unlockable layer.
+- Final theme and working title. (Engine, art style and the 3-month milestone are set in section 12.)
+- Budget beyond solo time with AI agents; timeline after the first prototype.
 - Re-pull 2026 market figures; confirm the Apple age-rating tiers.
+
+## 12. Interview decisions (2026-10-12, user answers after the reference-game research)
+These supersede earlier open items where they conflict.
+
+**Product shape**
+- **No separate Little mode.** One mode that deepens with use: everyone starts with exploring, caring for and dressing creatures. Builder mode (ages 8-10) is an unlockable layer, **built after the core creature loop is proven**, not in the prototype.
+- **No creature cap on the free first island.** Revenue comes from new islands, creature families, outfits and decor, not from limiting what a child keeps.
+- **Stay goal-free like Toca.** No collection book or quests; creature care, moods and breeding provide the structure. (Avatar World's hidden-object hunts were offered and declined.)
+- **Needs and moods:** unproven in either reference game, so **prototype both a version with visible needs and one without, and test**.
+- **Must stay true whatever the theme:** creature care with moods, deterministic breeding, a reactive world, and the parent storybook.
+- **Open-ended sessions, no daily pull.** Nothing is lost or missed if a child stays away.
+- **First minutes:** the child meets and chooses a first creature (a short hatch or rescue moment), then the creature creator, then the island. The child is not an avatar-maker first.
+- **Life cycle without death:** creatures grow baby, young, adult; **they never die; elders become guardians** (bonuses or stories). Offspring carry on the family.
+- **Breeding (prototype):** an egg appears from two creatures and the child **picks one trait from each parent** with a live preview. Deterministic. Real inheritance rules and a family-tree layer are a later, older-child layer.
+- **World clock:** **island-time, independent of real time and of location.** Day/night, weather and seasons run on the game's own clock, so nothing depends on location or the device date and the earlier location revisit item is resolved. (Check this against the wish below to teach telling the time.)
+- **Multiplayer:** none at launch; revisit after a compliance review.
+- **Text:** no reading needed for the child (icons, colour, animation, short voiced cues); all text in the parent area; English first.
+- **Storybook:** lives inside the parent-gated area, readable and savable as a PDF or image; no accounts or uploads.
+
+**Learning (embedded; no claims until tested):** empathy and caring, cause and effect, patterns and inheritance, creativity and design, and **everyday concepts: the clock, shapes, colours and numbers**.
+
+**Money:** free first island; later islands as one-time purchases restored across devices; **a free weekly item**; and **small optional packs (outfits, decor), all behind a parent gate and outside the play flow.** No subscription, no loot boxes.
+
+**Theme:** **open to a different theme.** The 3-month prototype uses the unicorn sanctuary and a **mix of creatures in which unicorns are one example**; the theme is chosen from playtests.
+
+**Build and business**
+- **Solo with AI agents.** Goal: **prove it first**: a small prototype tested with children and parents, then decide how big to go.
+- **Engine: Godot**, targeting **iOS first and Android after.** Art: **layered, recolourable 2D parts** (suits combinable traits and breeding).
+- **First milestone: about 3 months**: one island with creature creator, care, mood, island-time day/night and a first breeding step, tested with 5-10 children and parents.
+- **Discovery:** App Store plus parent reviews, **and kid-safe creator videos**, so design for shareable looks and free drops without breaking the Kids Category rules.
+
+### 12b. Second interview round (2026-10-12)
+- **Creator content to design for:** creature reveals (hatching, trait-picking with the live preview, family tree), island makeovers across seasons and weather, weekly free drops, and storybook pages shared as images (no uploads from the game).
+- **In-game clock:** a sun-and-moon arc as the main time cue, plus an optional simple analog clock tied to creature routines (breakfast, play, bedtime), clearly "island time", so it is not mistaken for real time.
+- **Learning to test in the first playtest:** empathy and caring, cause and effect, patterns and inheritance. Clock, shapes, colours and numbers come through in design but are not the first test.
+- **AI use:** AI-assisted art, sound and text **with human cleanup**. Open: ownership of AI-assisted assets, consistency across a layered-parts library, and App Review and parent-trust implications; check before any asset ships. The storybook text stays templated, not generated.
+- **Playtesters:** a mix, starting with family and friends' children, then an educator and a few outside families. Keep written parent consent.
+- **Measuring:** observation plus simple anonymous on-device logs read by hand; no network and no analytics SDK in the prototype.
+- **Android:** research Google Play Families and Android compliance **after the iOS prototype**, when a store build is planned.
+- **Art mood:** not chosen; **make a few quick style samples first** (soft pastel, bold graphic, painterly storybook) and pick from them.
+
+**New open items from these answers**
+- **Android compliance** (Google Play Families policy, data safety, an Android age-gate pattern) has not been researched; only Apple's Kids Category and COPPA were checked. Scheduled after the iOS prototype (12b).
+- **Teaching the clock with island-time:** resolved in 12b (sun-and-moon arc plus an optional analog clock, labelled island time); watch in playtests for confusion with real time.
+- **Learning outcomes list is long:** resolved in 12b (test empathy, cause and effect, patterns and inheritance first).
+- **Goal-free plus no quests** leaves creature care, mood and breeding to carry engagement; the needs test above is where that is checked.
+- **Creator-video discovery** conflicts mildly with no secrets or goals (Avatar World's creators mostly film secrets and free coins); decide what creators will film.
+- **AI-assisted assets:** decided in 12b to allow with human cleanup; ownership and App Review implications still to check.
