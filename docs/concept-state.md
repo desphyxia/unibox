@@ -127,6 +127,22 @@ These supersede earlier open items where they conflict.
 - **Parent area (behind the gate):** storybook, purchases and restore, play controls (sound, rest reminders, optional session limit), privacy and data with a delete-all-progress button. The prototype is not shipped, so purchases and restore can be stubbed until a store build.
 - **Audio:** creature sounds and music, **no narrator**; nothing to translate and no voice talent needed.
 
+### 12d. Fourth interview round (2026-10-12): playtest gate and prototype content
+**Playtest pass gate (all of the following, not a score):**
+- Children **choose to keep playing**: most play 10+ minutes unprompted and ask to play again.
+- Children **make a creature their own**: they name, style or choose traits and show attachment.
+**Stop or change direction if:**
+- Children are **bored within minutes** (most stop or need prompting to find something to do), or
+- **the youngest cannot use it**: 4-year-olds cannot reach the core loop alone.
+**Sample:** 5-10 children, one session each, **focused on ages 4-6 with a few 7-10**. One session cannot show retention; the gate measures first-session engagement and attachment only.
+Not in the gate (noted, not decided): response to creature needs, distress at needs, parent willingness to pay. The needs-versus-no-needs comparison therefore needs its own observation notes, since the gate does not judge it.
+
+**Prototype content**
+- **Creature kinds (3):** unicorn, a sea-horse or water creature, and a fox spirit or forest creature.
+- **Places (2):** meadow and pond or lake.
+- **Temperaments (3):** calm, playful, curious.
+- **What changes with the island-time weather and season pair:** how the island looks, what creatures do, what grows, and how places feel (for example the pond freezing). All four were chosen. This is more than a thin slice if each is built deeply; build the **look** and **creature behaviour** first, then **growth** (tied to hunger) and **place effects** as time allows.
+
 **New open items from these answers**
 - **Android compliance** (Google Play Families policy, data safety, an Android age-gate pattern) has not been researched; only Apple's Kids Category and COPPA were checked. Scheduled after the iOS prototype (12b).
 - **Teaching the clock with island-time:** resolved in 12b (sun-and-moon arc plus an optional analog clock, labelled island time); watch in playtests for confusion with real time.
