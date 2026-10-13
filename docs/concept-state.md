@@ -143,6 +143,30 @@ Not in the gate (noted, not decided): response to creature needs, distress at ne
 - **Temperaments (3):** calm, playful, curious.
 - **What changes with the island-time weather and season pair:** how the island looks, what creatures do, what grows, and how places feel (for example the pond freezing). All four were chosen. This is more than a thin slice if each is built deeply; build the **look** and **creature behaviour** first, then **growth** (tied to hunger) and **place effects** as time allows.
 
+### 12e. Fifth interview round (2026-10-13): interaction, breeding flow, name
+- **Touch:** tap to pet or call a creature (it answers with a sound and small animation); drag food, water or toys onto it; drag a creature to walk it to places. Press-and-hold to cuddle was not chosen.
+- **Breeding flow:** the child picks two adult creatures to spend time together; after a short moment an egg appears, the child picks traits (one from each parent, live preview), and the egg hatches on the island.
+- **Cross-kind breeding:** same kind only in the prototype (mixed-kind offspring is a later, larger feature).
+- **Name feel:** cosy and descriptive. **Not chosen yet.** Candidates checked on 2026-10-13 against US App Store search and a web search (this is **not trademark clearance**; it only found no exact-name app or game): *Moonmeadow Isles*, *Glimmer Meadow Isles*, *Dewdrop Isles*, *Willow Isle Sanctuary*. Near-misses to avoid confusion with: Moonstone Island (a creature-collecting life sim), Moondrop Isle, Creature Isle, Livly Island, Hello Kitty Island Adventure. *Starlit Sanctuary* is close to a registered "Starlit Adventures" mark for game software. A real clearance needs a search of the USPTO, EUIPO and WIPO databases (ideally by a trademark attorney) before any name is used publicly.
+
+**Name update (2026-10-13), second batch.** Checked the same way (US App Store, Google Play and a web search; not trademark clearance) and found no exact-name app or game: *Thistledown Isles*, *Fernlight Isles*, *Cloverlight Isle*, *Pebblebrook Haven*, *Hollowhill Haven*, *Honeydew Haven*, *Whistlewood Haven*, *Brightwater Haven*, *Starmeadow Haven*, *Mossglow Isles*. Avoid *Little Haven Isles* (close to the Switch game "My Little Haven" and "Littlehaven").
+
+**Games found with similar names that are close to this concept**
+- **Livly Island** (ENSAPIA, 2021, 4+, free with in-app purchases, about 2,900 ratings, 4.6): the closest. Raise small creatures (70+ species) on your own island: feed, keep clean, colour change from food, transformation potions, decorate the island, dress an avatar, a part-time job. From the store description only; breeding and moods unconfirmed.
+- **Creature Isle** (single indie developer, released 2026-03, 4+, free, no ratings yet): gentle island, find and adopt creatures, nurture a family, co-op with friends, build a haven. Closest in wording to a "sanctuary"; tiny so far.
+- **Hello Kitty Island Adventure** (Apple Arcade, 4+, about 160,000 ratings): cosy island life sim with licensed characters; not creature raising, but shows the cosy-island style working with a young audience.
+- **Moonstone Island** (PC and Switch, 12+ on mobile via Crunchyroll): creature-taming and card battles; not similar for this audience. **Moondrop Isle** is an interactive fiction game; unrelated.
+
+**How successful is Livly Island? (2026-10-13)** A profitable niche, not a mass hit. Apple: about 98,000 ratings in Japan at 4.60 against 2,921 in the US; Google Play: about 3.0M installs, 32,000 ratings at 3.90, listed as "Social". The publisher's 2025 press kit claims **over $50M revenue since 2021** (company claim, unaudited; roughly $12M a year by simple division) after buying the rights for about $110K and rebuilding it over nine months; the 2.6M monthly users in that kit combine Livly Island and Pokecolo. The only independent figure found is a Sensor Tower snapshot of about $50K in one US week (Q3 2024). Monetisation is in-app purchases of $0.99-$99.99 per item, no ads. Audience age unverified, probably older than 4-10. Reach is about 1-2% of Avatar World's by installs.
+
+**Unicorn-focused games (2026-10-13, US App Store and Google Play searches; not exhaustive)**
+- **Demand is real.** The biggest unicorn pet-care games are TutoTOONS' *Kpopsies - Hatch Baby Unicorns* (about 61M Play installs, 3.91), *My Baby Unicorn - Pony Care* (about 47M, 3.88; ads plus in-app purchases $3.99-$159.99) and *My Baby Unicorn 2* (about 24M, 3.73). Pazu, BabyBus and others add dress-up and salon games at 5-8M installs.
+- **Quality is low where the volume is.** Those leaders are ad-supported tap games rated 3.7-3.9 on Play, against 4.36 for Toca and 4.73 for Avatar World. The best-rated unicorn pet game found is *My little unicorn: Pets academy* (about 4.5M installs, 4.51).
+- **No iOS leader.** The only unicorn kids game over about 200,000 iOS ratings is a pet-salon game; Toca has about 0.9M.
+- **No unicorn game found that combines** real creature care and breeding, a living world and a parent storybook. Nearest: Livly Island (not unicorn-focused) and Pazu's *Magical Unicorn World*.
+- **Risks:** a crowded "unicorn" search; installs are not revenue (none found for unicorn titles); the audience looks girl-skewed (inference from titles); a licensed unicorn game (My Little Pony, Unicorn Academy) was not ruled out.
+- **Implication:** keep the prototype's unicorn plus a mix of creatures, test whether children respond to unicorns specifically, and if they do, use "unicorn" in the store subtitle with a distinctive main title.
+
 **New open items from these answers**
 - **Android compliance** (Google Play Families policy, data safety, an Android age-gate pattern) has not been researched; only Apple's Kids Category and COPPA were checked. Scheduled after the iOS prototype (12b).
 - **Teaching the clock with island-time:** resolved in 12b (sun-and-moon arc plus an optional analog clock, labelled island time); watch in playtests for confusion with real time.
