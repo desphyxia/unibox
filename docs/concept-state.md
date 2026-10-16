@@ -167,6 +167,13 @@ Not in the gate (noted, not decided): response to creature needs, distress at ne
 - **Risks:** a crowded "unicorn" search; installs are not revenue (none found for unicorn titles); the audience looks girl-skewed (inference from titles); a licensed unicorn game (My Little Pony, Unicorn Academy) was not ruled out.
 - **Implication:** keep the prototype's unicorn plus a mix of creatures, test whether children respond to unicorns specifically, and if they do, use "unicorn" in the store subtitle with a distinctive main title.
 
+### 12f. Sixth interview round (2026-10-16): the first ten minutes
+- **Opening:** a glowing egg in the meadow hatches at a touch (three or four taps or a rub). The first creature's kind is set by the facilitator so kinds can be compared across children.
+- **Naming:** **a parent types the name** in the parent area. Design consequence: the name step must be non-blocking, with a placeholder icon until named (see `docs/first-ten-minutes.md`, open points).
+- **First need (visible-needs variant):** at about 2-3 minutes, gently: the creature sighs at an apple tree with a soft glow; ignoring it has no consequence.
+- **Breeding in session one:** a second adult is already on the island; from about minute 6 a nest glows, the child pairs the two, and an egg and trait choice follow (two trait types offered in session one).
+- **New documents:** `docs/first-ten-minutes.md` (shot-by-shot session script, what the playtest watches, the local event log, open points) and `docs/design-brief.md` (one-page brief for people and coding agents).
+
 **New open items from these answers**
 - **Android compliance** (Google Play Families policy, data safety, an Android age-gate pattern) has not been researched; only Apple's Kids Category and COPPA were checked. Scheduled after the iOS prototype (12b).
 - **Teaching the clock with island-time:** resolved in 12b (sun-and-moon arc plus an optional analog clock, labelled island time); watch in playtests for confusion with real time.
