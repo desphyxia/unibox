@@ -4,6 +4,7 @@ Set by the user on 2026-10-17: the round 5 unicorn (`generators/artgen5.py`, `sa
 
 ## The bar (what "round 5 level" means)
 - **Built as a rig, not a picture.** A pose is a small set of numbers (body outline, neck curves, limb chains, head placement, hair directions). One drawing routine makes every view.
+- **One model behind every view.** All views of a creature come from the same model or rig, so a feature (hair, fin, stripe, face) cannot look different between views. Set by the user in round 9 after the 2D views drifted apart.
 - **Several poses and views.** At least stand, walk and sleep, plus a front view. Each pose reads as the right action at phone size (320 px wide).
 - **Shape traits as layers**, not only colour: wings, mane or tail style, coat pattern, markings. Each can be switched on or off without redrawing the pose.
 - **Flowing parts are built from many layered pieces** (locks, feathers, fins), with highlights and depth, never one stiff band.
@@ -28,5 +29,15 @@ Update this list each round: close items with the date, add new ones.
 | 8 | Generator comparison for concept art (Midjourney, Recraft and so on) never run; the code-drawn route is not final | art route | open |
 | 9 | Ground, trees and sparkles are placeholders | scenes | open |
 | 10 | Ownership of AI or code-generated art is unresolved for trademark and App Review (copyright: prompt-only output has none) | legal | open, see docs/concept-state.md 12g |
+| 11 | Rig is a family of skeletons, not one: each creature kind needs its own spine or limb layout, and each pose needs hand-set numbers | rig | open (seen again with the sea-horse) |
+| 12 | Sea-horse 3D (round 9): from behind the hair covers the whole back of the head; some hair locks cross with hard edges; backdrop is a flat painting with no light or shadow from the creature | sea-horse | open |
+| 13 | Sea-horse 3D: look (soft rendered PNG) differs from the flat SVG unicorn; needs a decision on one pipeline for all creatures; images are PNG, 480-550 KB each | art route | open, decision asked in round 9 |
+| 14 | Fox spirit not drawn (third creature kind) | creatures | open |
+
+Closed in round 7 (2026-10-17): sea-horse front view too wide (rebuilt from the side's depths); belly sheen blotchy; crest like petals in the side views; no back view; no tail or snout traits; scene was sparse (improved, see item 13).
+
+Closed in round 8 (2026-10-17): sea-horse front crest arcing like wings (hair now falls from the crown in all views); heavy back crest fountain; pectoral fin merging with the dorsal (dorsal moved to the lower back); patchy stripes (bands follow local width); front and back too thin (now halfway between thin and wide); neck long when swimming was closed in round 7.
+
+Closed in round 9 (2026-10-17): the same feature looking different between views (hair, fins, stripes, face) is closed for the sea-horse by building it as one 3D model; sea-horse back-view hair as a dome, pectoral fin merging with the dorsal, rainbow stripes, front/back width drift, 2D-only views. The 2D `seahorse.py` stays for reference.
 
 Closed: round 4 head colour bug (head gradient applied in the head's moved frame), fixed in round 5.
