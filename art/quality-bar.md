@@ -36,7 +36,7 @@ Update this list each round: close items with the date, add new ones.
 | 11 | Rig is a family of skeletons, not one: each creature kind needs its own spine or limb layout, and each pose needs hand-set numbers | rig | open (seen again with the sea-horse) |
 | 12 | Sea-horse 3D (round 9): from behind the hair covers the whole back of the head; some hair locks cross with hard edges; backdrop is a flat painting with no light or shadow from the creature | sea-horse | open |
 | 13 | Sea-horse 3D: look (soft rendered PNG) differs from the flat SVG unicorn; needs a decision on one pipeline for all creatures; images are PNG, 480-550 KB each | art route | open, decision asked in round 9 |
-| 14 | Fox spirit not drawn (third creature kind) | creatures | open |
+| 14 | Fox spirit (round 13): look is my own design (no reference given); sleeping pose shows little of the curled body; fur makes renders slow (3-5 min each) and would need a lighter fur for animation; extra tails (trait above 3) are copies of the raised tail fanned out | fox 3D | open |
 | 15 | Unicorn 3D (round 10b): folded wing in the sleeping pose is a tidy but boxy shape and its feather tips droop over the hip; the mane reads as stacked ribs when the neck lies flat; legs are smooth fused tubes, hooves small and plain | unicorn 3D | open |
 | 16 | Unicorn 3D: wings seen from the front are a thin V and show little; the face is closer to the 2D head but the muzzle is still rounder | unicorn 3D | open |
 | 18 | Round 11 unicorn vs the user's reference: no painted brushwork or pigment edges on the animal (soft rendered toy look); tail reads as one rope from the side; flowers are two rings of petals; hooves plain; raised foreleg tucked | unicorn 3D | open |
