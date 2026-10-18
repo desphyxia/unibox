@@ -5,6 +5,10 @@ Set by the user on 2026-10-17: the round 5 unicorn (`generators/artgen5.py`, `sa
 ## The bar (what "round 5 level" means)
 - **Built as a rig, not a picture.** A pose is a small set of numbers (body outline, neck curves, limb chains, head placement, hair directions). One drawing routine makes every view.
 - **One model behind every view.** All views of a creature come from the same model or rig, so a feature (hair, fin, stripe, face) cannot look different between views. Set by the user in round 9 after the 2D views drifted apart.
+- **Fused, not attached.** Limbs, neck and head grow out of the body with a smooth fillet; a visible cut edge, flat cap or seam where a part meets the body counts as a defect (user, round 10: "leg is sharp against the body"). Hair and wings follow a smooth body surface, and layered pieces are spaced further apart than they are thick, so they never cut through each other.
+- **No mirror twins.** Build a creature as one animal, not one half copied: mane, tail, bangs, flowers, freckles, ears, head pose and expression are deliberately uneven, and a single feature (mouth, mane) is one object across the whole animal (user, round 11: 'you seem to do everything symmetrically').
+- **Anatomy first.** A creature has one mane, one tail, one of each part, in the place a real animal has it; never two mirrored halves with a gap (user, round 11). Study the reference's face before building: eye shape and position, muzzle, forehead.
+- **Eyes sit on the face.** In the front view the gap between the eyes is about half the face width, as in the 2D unicorn head; lids and lashes rest on the eye's rim. The 2D head is the reference for the face.
 - **Several poses and views.** At least stand, walk and sleep, plus a front view. Each pose reads as the right action at phone size (320 px wide).
 - **Shape traits as layers**, not only colour: wings, mane or tail style, coat pattern, markings. Each can be switched on or off without redrawing the pose.
 - **Flowing parts are built from many layered pieces** (locks, feathers, fins), with highlights and depth, never one stiff band.
@@ -33,11 +37,19 @@ Update this list each round: close items with the date, add new ones.
 | 12 | Sea-horse 3D (round 9): from behind the hair covers the whole back of the head; some hair locks cross with hard edges; backdrop is a flat painting with no light or shadow from the creature | sea-horse | open |
 | 13 | Sea-horse 3D: look (soft rendered PNG) differs from the flat SVG unicorn; needs a decision on one pipeline for all creatures; images are PNG, 480-550 KB each | art route | open, decision asked in round 9 |
 | 14 | Fox spirit not drawn (third creature kind) | creatures | open |
+| 15 | Unicorn 3D (round 10b): folded wing in the sleeping pose is a tidy but boxy shape and its feather tips droop over the hip; the mane reads as stacked ribs when the neck lies flat; legs are smooth fused tubes, hooves small and plain | unicorn 3D | open |
+| 16 | Unicorn 3D: wings seen from the front are a thin V and show little; the face is closer to the 2D head but the muzzle is still rounder | unicorn 3D | open |
+| 18 | Round 11 unicorn vs the user's reference: no painted brushwork or pigment edges on the animal (soft rendered toy look); tail reads as one rope from the side; flowers are two rings of petals; hooves plain; raised foreleg tucked | unicorn 3D | open |
+| 19 | Round 11c unicorn: sleeping-pose mane is a jagged cluster of hair sheets; mane has no ringlets; head jaw and chin are simple; the front-view mouth line has a small kink at the muzzle tip | unicorn 3D | open |
+| 20 | Round 11d unicorn vs reference (painted brushwork dropped: a painted finish was tried in round 12 and the user preferred the rendered look): mane reads as layered sheets, not fine strands, and is rough at the parting from behind; no ringlets in the mane; tail reads as one thick rope from the side | unicorn 3D | open |
+| 17 | 3D renders not tested in a running Godot scene or on a device; the study page picture was reported cut off on a phone (files intact, so probably a partial load of the large PNG; pictures are now WebP, about a tenth of the size) | all 3D | open until confirmed on the phone |
 
 Closed in round 7 (2026-10-17): sea-horse front view too wide (rebuilt from the side's depths); belly sheen blotchy; crest like petals in the side views; no back view; no tail or snout traits; scene was sparse (improved, see item 13).
 
 Closed in round 8 (2026-10-17): sea-horse front crest arcing like wings (hair now falls from the crown in all views); heavy back crest fountain; pectoral fin merging with the dorsal (dorsal moved to the lower back); patchy stripes (bands follow local width); front and back too thin (now halfway between thin and wide); neck long when swimming was closed in round 7.
 
 Closed in round 9 (2026-10-17): the same feature looking different between views (hair, fins, stripes, face) is closed for the sea-horse by building it as one 3D model; sea-horse back-view hair as a dome, pectoral fin merging with the dorsal, rainbow stripes, front/back width drift, 2D-only views. The 2D `seahorse.py` stays for reference.
+
+Closed in round 10b (2026-10-17): unicorn 3D eyes too far apart in the front view (moved forward and inward, head narrowed); eyebrow misplaced (lid and lashes now sit on the eye's rim); leg sharp against the body (torso, neck and legs fused into one surface with smoothed joins); stepped, ribbed wing (smooth feather sheets with scalloped tips); mane locks cutting through each other (thin ribbons spaced apart); rump ledge from the hind leg's flat top; ragged colour edge at the throat (head shading used the wrong ring axis); black gap under the lying belly (soft bounce light).
 
 Closed: round 4 head colour bug (head gradient applied in the head's moved frame), fixed in round 5.
