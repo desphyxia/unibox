@@ -25,19 +25,22 @@ Press and hold the dots in the top-right corner, answer the grown-ups question, 
 - island-time speed (fast for demos);
 - **New session** for the next child: a new egg and a new log.
 
-Each session writes a tab-separated event log on the device. The parent area shows the file path. The log holds
-no name and no identifiers.
+Each session writes a tab-separated event log on the device. In the parent area, **Show event log** displays it with
+a **Copy all** button; this works on the iPad too, where the log sits in the browser's storage. The log holds no
+name and no identifiers.
 
 ## Stand-ins
-- Only the idle loop is rendered. Walking, reactions and eating are hops, squashes and tilts of that loop until
-  their animations are rendered.
+- Rendered: the sitting idle loop and a walk cycle. The walk plays at the speed that keeps a paw on the ground in
+  step with the meadow. Reactions and eating are still squashes, hops and tilts of the idle loop.
 - The meadow art is drawn from code (`art/generators/meadow.py`).
 - The sounds are synthesised (`art/generators/sfx.py`).
 - There's no music yet.
 
 ## Running
 - **Desktop:** open the folder in Godot 4.7.2 and press Play. The mouse acts as a finger.
-- **iPad, without a Mac:** export the "Web" preset to `build/web`, run `python serve_web.py`, and open the printed
-  address in Safari on the same Wi-Fi. Sound is off in the web build.
+- **iPad, without a Mac:** open https://desphyxia.github.io/unibox/ in Safari. Every push that changes `game/`
+  rebuilds that page (`.github/workflows/pages.yml`).
+- **Local web build:** export the "Web" preset to `build/web`, run `python serve_web.py`, and open the printed
+  address on the same Wi-Fi. Sound is off this way, because a home network serves plain http.
 - **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR` plays through the session with simulated
   touches and saves a screenshot at each step.

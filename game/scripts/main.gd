@@ -24,14 +24,16 @@ var tag: NameTag
 var time: IslandTime
 var ui: ParentUI
 var frames: SpriteFrames
+var anim_info := {}                         ## animation name -> its anim.json (anchor, shadow, stride)
 var _spots_used := {}
 var _active: Touchable = null
 var _ground_press = null
+var _finger := -1                           ## the touch being followed; Safari numbers touches arbitrarily, not from 0
 
 
 func _ready() -> void:
 	randomize()
-	frames = _load_frames("res://art/creatures/%s/idle" % Game.kind)
+	frames = _load_frames("res://art/creatures/%s" % Game.kind, ["idle", "walk"])
 	_build_world()
 	ui = ParentUI.new()
 	add_child(ui)
@@ -44,15 +46,23 @@ func _ready() -> void:
 	_start_session()
 
 
-func _load_frames(folder: String) -> SpriteFrames:
+func _load_frames(folder: String, names: Array) -> SpriteFrames:
+	## each animation is a folder of frames plus anim.json (made by art/tools/pack_anim.py)
 	var f := SpriteFrames.new()
-	f.add_animation("idle")
-	f.set_animation_speed("idle", 12.0)
-	f.set_animation_loop("idle", true)
-	var i := 0
-	while ResourceLoader.exists("%s/frame_%02d.png" % [folder, i]):
-		f.add_frame("idle", load("%s/frame_%02d.png" % [folder, i]))
-		i += 1
+	for anim in names:
+		var dir: String = "%s/%s" % [folder, anim]
+		var meta := FileAccess.get_file_as_string(dir + "/anim.json")
+		if meta == "":
+			continue
+		var info: Dictionary = JSON.parse_string(meta)
+		anim_info[anim] = info
+		f.add_animation(anim)
+		f.set_animation_speed(anim, float(info.get("fps", 12.0)))
+		f.set_animation_loop(anim, true)
+		var i := 0
+		while ResourceLoader.exists("%s/frame_%02d.png" % [dir, i]):
+			f.add_frame(anim, load("%s/frame_%02d.png" % [dir, i]))
+			i += 1
 	f.remove_animation("default")
 	return f
 
@@ -138,7 +148,7 @@ func _new_session() -> void:
 func _on_hatched(at: Vector2) -> void:
 	creature = Creature.new()
 	creature.meadow = self
-	creature.setup(frames, Game.temperament, CREATURE_SCALE)
+	creature.setup(frames, anim_info, Game.temperament, CREATURE_SCALE)
 	world.add_child(creature)
 	creature.appear(at + Vector2(0, 24))
 	tag = NameTag.new()
@@ -209,6 +219,13 @@ func apple_released(a: Apple) -> void:
 
 
 # ------------------------------------------------------------------ touch routing
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
+		_finger = -1                                # a lift we never heard about must not lock out the next touch
+		_active = null
+		_ground_press = null
+
+
 func _to_world(screen: Vector2) -> Vector2:
 	return world.get_global_transform_with_canvas().affine_inverse() * screen
 
@@ -227,14 +244,20 @@ func _pick(p: Vector2) -> Touchable:
 func _unhandled_input(e: InputEvent) -> void:
 	if ui.blocking:
 		_active = null
+		_finger = -1
 		return
 	if e is InputEventScreenTouch:
-		if e.index != 0:
+		if e.pressed:
+			if _finger != -1 and _finger != e.index:
+				return                              # a second finger while one is down
+		elif e.index != _finger:
 			return
 		if ui.corner_rect().has_point(e.position):
+			_finger = -1
 			return
 		var p := _to_world(e.position)
 		if e.pressed:
+			_finger = e.index
 			_active = _pick(p)
 			_ground_press = null if _active else p
 			if _active:
@@ -246,7 +269,8 @@ func _unhandled_input(e: InputEvent) -> void:
 				_ground_tap(p)
 			_active = null
 			_ground_press = null
-	elif e is InputEventScreenDrag and e.index == 0 and _active and is_instance_valid(_active):
+			_finger = -1
+	elif e is InputEventScreenDrag and e.index == _finger and _active and is_instance_valid(_active):
 		_active.touch_move(_to_world(e.position))
 
 

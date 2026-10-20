@@ -7,11 +7,13 @@ extends Touchable
 signal petted
 signal ate
 
-const FEET := Vector2(142, 471)        ## where the feet are in a frame (pixels): the creature's origin
-const MOUTH := Vector2(282, 176)       ## the mouth, for eating (frame pixels, facing right)
-const HEAD := Vector2(232, 150)
-const HEIGHT := 470.0
-const WALK_SPEED := 150.0
+## Points on the sitting fox, in render pixels of the 640-wide frames (facing right). The creature's origin is the
+## anchor from anim.json: the same ground point in every animation, so idle and walk line up.
+const FEET_R := Vector2(297, 517)
+const MOUTH_R := Vector2(437, 222)
+const HEAD_R := Vector2(387, 196)
+const TOP_R := 61.0
+const WALK_SPEED := 120.0
 const GROUND := Rect2(120, 525, 784, 205)  ## where it may walk (world), inside the always-visible area
 
 var temperament := "playful"
@@ -29,6 +31,8 @@ var tilt := 0.0
 var squash_v := Vector2.ONE
 var facing := 1.0
 
+var anims := {}                        ## name -> anim.json info
+var _ref := Vector2.ZERO               ## from the anchor to the sitting fox's feet, frame pixels
 var target = null                      ## Vector2 to walk to, or null
 var speed_factor := 1.0
 var busy := false                      ## reacting or eating: stands still
@@ -50,7 +54,8 @@ var _next_cue := 0.0
 var _age := 0.0
 
 
-func setup(frames: SpriteFrames, temper: String, world_scale: float) -> void:
+func setup(frames: SpriteFrames, infos: Dictionary, temper: String, world_scale: float) -> void:
+	anims = infos
 	temperament = temper
 	base_scale = world_scale
 	touch_priority = 20
@@ -62,8 +67,9 @@ func setup(frames: SpriteFrames, temper: String, world_scale: float) -> void:
 	flip.add_child(sprite)
 	sprite.sprite_frames = frames
 	sprite.centered = false
-	sprite.offset = -FEET
-	sprite.play("idle")
+	var idle: Dictionary = anims["idle"]
+	_ref = FEET_R - Vector2(idle["render_anchor"][0], idle["render_anchor"][1])
+	_play("idle")
 	sprite.frame = randi() % frames.get_frame_count("idle")
 	_next_wander = _wander_gap()
 
@@ -75,21 +81,23 @@ func depth_scale() -> float:
 
 func head_world() -> Vector2:
 	var s := depth_scale()
-	return position + Vector2((HEAD.x - FEET.x) * facing, HEAD.y - FEET.y) * s + Vector2(0, -lift)
+	var d := HEAD_R - FEET_R + _ref
+	return position + Vector2(d.x * facing, d.y) * s + Vector2(0, -lift)
 
 
 func mouth_world() -> Vector2:
 	var s := depth_scale()
-	return position + Vector2((MOUTH.x - FEET.x) * facing, MOUTH.y - FEET.y) * s + Vector2(0, -lift)
+	var d := MOUTH_R - FEET_R + _ref
+	return position + Vector2(d.x * facing, d.y) * s + Vector2(0, -lift)
 
 
 func top_world() -> Vector2:
-	return position + Vector2(0, -HEIGHT * depth_scale() - lift)
+	return position + Vector2(0, (TOP_R - FEET_R.y + _ref.y) * depth_scale() - lift)
 
 
 func hit_test(p: Vector2) -> bool:
 	var s := depth_scale()
-	var c := position + Vector2(10 * facing, -235) * s
+	var c := position + Vector2((10 + _ref.x) * facing, -235 + _ref.y) * s
 	var d := (p - c) / (Vector2(165, 250) * s)
 	return d.length() <= 1.0
 
@@ -195,7 +203,7 @@ func fetch(apple: Node2D) -> void:
 	## an apple dropped near it: walk over and eat it from the ground
 	food_target = apple
 	face_toward(apple.position.x)
-	walk_to(apple.position + Vector2(-(MOUTH.x - FEET.x) * depth_scale() * signf(apple.position.x - position.x + 0.01), 6), 1.2)
+	walk_to(apple.position + Vector2(-(MOUTH_R.x - FEET_R.x + _ref.x) * depth_scale() * signf(apple.position.x - position.x + 0.01), 6), 1.2)
 
 
 func eat(apple: Node2D, how: String) -> void:
@@ -261,6 +269,21 @@ func appear(from: Vector2) -> void:
 		walk_to(from + Vector2(120, 50), 0.8))
 
 
+var _still_for := 0.0
+
+
+func _play(anim: String) -> void:
+	## swap loops around the shared anchor; a small squash hides the change of pose
+	var info: Dictionary = anims[anim]
+	sprite.offset = -Vector2(info["anchor"][0], info["anchor"][1])
+	sprite.speed_scale = 1.0
+	sprite.play(anim)
+	if anim == "idle" and not busy:
+		var t := create_tween()
+		t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.07)
+		t.tween_property(self, "squash_v", Vector2.ONE, 0.12)
+
+
 func _wander_gap() -> float:
 	match temperament:
 		"calm":
@@ -286,16 +309,31 @@ func _process(delta: float) -> void:
 			moving = true
 			if absf(d.x) > 3:
 				face_toward(position.x + d.x)
-	_walk_amount = move_toward(_walk_amount, 1.0 if moving else 0.0, delta * 6.0)
-	if moving:
+	var has_walk := anims.has("walk")
+	if has_walk:
+		if moving:
+			_still_for = 0.0
+			if sprite.animation != "walk":
+				_play("walk")
+			var w: Dictionary = anims["walk"]
+			# cycles per second so a paw on the ground keeps pace with the meadow
+			var v := WALK_SPEED * speed_factor
+			sprite.speed_scale = clampf(w["stance"] * v / (w["stride"] * depth_scale()), 0.4, 3.0)
+		else:
+			_still_for += delta
+			if sprite.animation == "walk" and _still_for > 0.12:
+				_play("idle")
+	_walk_amount = move_toward(_walk_amount, 1.0 if (moving and not has_walk) else 0.0, delta * 6.0)
+	if moving and not has_walk:
 		_hop += delta * 10.0 * clampf(speed_factor, 0.8, 1.6)
 	var hop := absf(sin(_hop)) * 9.0 * _walk_amount
 	var s := depth_scale()
 	body.position.y = -(lift + hop)
 	body.rotation = tilt + sin(_hop) * 0.045 * _walk_amount
 	squash.scale = squash_v * s
-	shadow.scale = Vector2(300.0, 52.0) / 256.0 * s * (1.0 - clampf((lift + hop) / 160.0, 0.0, 0.35))
-	shadow.position = Vector2(4 * facing, -4) * s
+	var info: Dictionary = anims[sprite.animation]
+	shadow.scale = Vector2(info["shadow"][1], info["shadow"][1] * 0.17) / 256.0 * s * (1.0 - clampf((lift + hop) / 160.0, 0.0, 0.35))
+	shadow.position = Vector2(info["shadow"][0] * facing, -4) * s
 	# idle life: wander a little now and then
 	if target == null and not busy and not _dragging:
 		_idle_for += delta

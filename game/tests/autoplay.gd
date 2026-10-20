@@ -5,6 +5,7 @@ extends Node
 var main: Node2D
 var out := "user://autoplay"
 var step := 0
+const FINGER := 4127                       ## Safari gives touches large arbitrary numbers, not 0
 
 
 func _ready() -> void:
@@ -110,7 +111,7 @@ func shot(name: String) -> void:
 
 func _touch(p: Vector2, pressed: bool) -> void:
 	var e := InputEventScreenTouch.new()
-	e.index = 0
+	e.index = FINGER
 	e.position = p
 	e.pressed = pressed
 	Input.parse_input_event(e)
@@ -128,7 +129,7 @@ func release(p: Vector2) -> void:
 
 func drag(p: Vector2) -> void:
 	var e := InputEventScreenDrag.new()
-	e.index = 0
+	e.index = FINGER
 	e.position = p
 	Input.parse_input_event(e)
 	await get_tree().process_frame

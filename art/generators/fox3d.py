@@ -1274,6 +1274,164 @@ class FoxRig:
         return {a, a + 1}
 
 
+class WalkRig(FoxRig):
+    """A walk cycle on the standing fox, in place (the game moves the sprite). Each leg swings from its shoulder or hip in a
+    four-beat walk (hind near, fore near, hind far, fore far). In the stance part of a step the paw moves back at a steady
+    speed, so a paw on the ground does not slide against the meadow; in the swing part the lower leg folds and the paw lifts.
+    Skin, ruff and fur near each leg follow it with smooth weights; the body bobs twice per cycle."""
+
+    STANCE = 0.6
+    OFFSETS = (0.25, 0.75, 0.0, 0.5)          # fore near, fore far, hind near, hind far
+
+    def __init__(self, fox, stride=1.1):
+        super().__init__(fox)
+        P = fox.pose
+        self.stride = stride
+        chains = list(P["fore"].items()) + list(P["hind"].items())
+        self.legs = []
+        for li, ((sgn, chain), (dl, top)) in enumerate(zip(chains, fox.legs)):
+            pts = np.array([tuple(v) for v in dl])
+            hind = li >= 2
+            pivot = np.array(P["haunch"][sgn][0]) if hind else pts[0] + np.array([0, 0, 0.1])
+            poly = np.vstack([pivot, pts])
+            seg = np.linalg.norm(np.diff(poly, axis=0), axis=1)
+            tpar = np.concatenate([[0.0], np.cumsum(seg)]) / seg.sum()
+            kn = int(len(poly) * 0.58)
+            h = pivot[2] - pts[-1][2]
+            A = math.asin(min(0.85, stride / (2 * h)))
+            self.legs.append(dict(poly=poly, t=tpar, pivot=pivot, knee=poly[kn], kt=tpar[kn], A=A, r=max(q[3] for q in chain),
+                                  bend=0.75 if hind else 0.95, off=self.OFFSETS[li]))
+        # leg weights at rest, for the skin and for each fur strand's root
+        self.mesh_w = {}
+        for k, (ob, co, kind, extra) in enumerate(self.meshes):
+            if kind == "body":
+                self.mesh_w[k] = self.leg_weights(co)
+        self.fur_w = []
+        for ob, P0, kind, idx, tt in self.fur:
+            w = np.zeros((len(P0), 3))
+            sel = kind == 0
+            if sel.any():
+                w[sel] = self.leg_weights(P0[sel, 0, :].astype(np.float64))
+            self.fur_w.append(w)
+
+    def leg_weights(self, p):
+        """per point: (leg index, weight, position along the leg 0 hip .. 1 paw)"""
+        best_d = np.full(len(p), 1e9)
+        best_t = np.zeros(len(p))
+        best_l = np.zeros(len(p))
+        for li, L in enumerate(self.legs):
+            poly, tp = L["poly"], L["t"]
+            for j in range(len(poly) - 1):
+                a, b = poly[j], poly[j + 1]
+                ab = b - a
+                u = np.clip(((p - a) @ ab) / max(ab @ ab, 1e-9), 0, 1)
+                d = np.linalg.norm(p - (a + u[:, None] * ab), axis=1)
+                better = d < best_d
+                best_d[better] = d[better]
+                best_t[better] = tp[j] + u[better] * (tp[j + 1] - tp[j])
+                best_l[better] = li
+        r = np.array([self.legs[int(i)]["r"] for i in best_l])
+        w = ss(r + 0.34, r + 0.1, best_d) * ss(0.1, 0.42, best_t)
+        return np.stack([best_l, w, best_t], axis=1)
+
+    def leg_angles(self, L, u):
+        """swing angle at the hip and extra fold at the knee, for cycle position u (0..1)"""
+        q = (u + L["off"]) % 1.0
+        A = L["A"]
+        if q < self.STANCE:                                 # paw on the ground, moving back steadily
+            return -A + 2 * A * q / self.STANCE, 0.0
+        s = (q - self.STANCE) / (1 - self.STANCE)          # paw in the air, swinging forward
+        return A - 2 * A * (0.5 - 0.5 * math.cos(math.pi * s)), L["bend"] * math.sin(math.pi * s)
+
+    def apply_legs(self, p, W, u, bob):
+        out = p.copy()
+        li_all = W[:, 0].astype(int)
+        for li, L in enumerate(self.legs):
+            sel = (li_all == li) & (W[:, 1] > 1e-4)
+            if not sel.any():
+                continue
+            th, be = self.leg_angles(L, u)
+            R1 = _rot((0, 1, 0), th)
+            q = p[sel]
+            q1 = (q - L["pivot"]) @ R1.T + L["pivot"]
+            knee = (L["knee"] - L["pivot"]) @ R1.T + L["pivot"]
+            R2 = _rot((0, 1, 0), be)
+            q2 = (q1 - knee) @ R2.T + knee
+            k = ss(L["kt"] - 0.08, L["kt"] + 0.08, W[sel, 2])[:, None]
+            q1 = q1 + (q2 - q1) * k
+            w = W[sel, 1][:, None]
+            # the paws stay on the ground while the body bobs
+            moved = q + (q1 - q) * w - np.array([0, 0, bob]) * (w * W[sel, 2][:, None])
+            # nothing goes through the ground: a folding lower leg can otherwise push a paw below it
+            moved[:, 2] = np.maximum(moved[:, 2], np.minimum(q[:, 2], GROUND_Z))
+            out[sel] = moved
+        return out
+
+    def frame(self, f, nfr):
+        u = f / nfr
+        ph = 2 * math.pi * u
+        bob = 0.045 * math.cos(4 * math.pi * u)
+        lift = np.array([0, 0, bob])
+        R = _rot((0, 0, 1), math.radians(1.5) * math.sin(ph)) @ _rot((1, 0, 0), math.radians(1.2) * math.sin(ph + 0.6)) \
+            @ _rot((0, 1, 0), math.radians(2.2) * math.sin(2 * ph + 0.9))
+        H = lambda p: (p - self.pivot) @ R.T + self.pivot + lift
+        B0 = self.body_tf(ph, lambda p: (p - self.pivot) @ R.T + self.pivot)
+        B = lambda p: B0(p) + lift
+        for k, (ob, co, kind, extra) in enumerate(self.meshes):
+            if kind == "body":
+                new = self.apply_legs(B(co), self.mesh_w[k], u, bob)
+            elif kind == "head":
+                new = H(co)
+            elif kind == "ear":
+                new = H(self.ear_tf(extra, 0, nfr)(co))
+            else:
+                ti, t = extra
+                new = self.tail_tf(ti, ph)(co, t) + lift
+            ob.data.vertices.foreach_set("co", new.astype(np.float32).ravel())
+            ob.data.update()
+        for k, (base, sz, items) in enumerate(self.fires):
+            fl = np.array([0.05 * math.sin(ph + 1.7 * k), 0.0, 0.08 * math.sin(ph + 2.1 * k)]) + lift
+            sc = 1 + 0.06 * math.sin(2 * ph + k)
+            for ob, co in items:
+                new = (co - base) * np.array([sc, sc, 1 + 0.1 * math.sin(2 * ph + k)]) + base + fl
+                ob.data.vertices.foreach_set("co", new.astype(np.float32).ravel())
+                ob.data.update()
+        for (ob, P0, kind, idx, tt), W in zip(self.fur, self.fur_w):
+            N, K, _ = P0.shape
+            new = P0.astype(np.float64).copy()
+            sel = kind == 0
+            if sel.any():
+                roots = new[sel, 0, :]
+                moved = new[sel] + (B(roots) - roots)[:, None, :]
+                Wp = np.repeat(W[sel], K, axis=0)
+                new[sel] = self.apply_legs(moved.reshape(-1, 3), Wp, u, bob).reshape(-1, K, 3)
+            sel = kind == 1
+            if sel.any():
+                new[sel] = H(new[sel].reshape(-1, 3)).reshape(-1, K, 3)
+            for ei in range(len(self.ears)):
+                sel = (kind == 2) & (idx == ei)
+                if sel.any():
+                    new[sel] = H(self.ear_tf(ei, 0, nfr)(new[sel].reshape(-1, 3))).reshape(-1, K, 3)
+            for ti in range(len(self.tail_roots)):
+                sel = (kind == 3) & (idx == ti)
+                if sel.any():
+                    t = (tt[sel][:, None] + 0.08 * np.linspace(0, 1, K)[None, :]).reshape(-1)
+                    new[sel] = (self.tail_tf(ti, ph)(new[sel].reshape(-1, 3), np.minimum(t, 1.0)) + lift).reshape(-1, K, 3)
+            ob.data.position_data.foreach_set("vector", new.astype(np.float32).ravel())
+            ob.data.update_tag()
+        for ob in self.fox.blink_open:                      # eyes open the whole walk
+            ob.hide_render = False
+        for ob in self.fox.blink_closed:
+            ob.hide_render = True
+
+
+def anchor_px(sc, cam, p):
+    """where a world point lands in the rendered frame, in pixels from the top left"""
+    from bpy_extras.object_utils import world_to_camera_view
+    v = world_to_camera_view(sc, cam, Vector(p))
+    return (v.x * sc.render.resolution_x, (1 - v.y) * sc.render.resolution_y)
+
+
 def stage(sc, view, zoom=None):
     """camera and lights shared by stills and animation"""
     center = Vector((-0.3, 0, 3.05)) if zoom is None else Vector((zoom[0], 0, zoom[1]))
@@ -1296,18 +1454,26 @@ def stage(sc, view, zoom=None):
         c = ob.constraints.new("TRACK_TO")
         c.target, c.track_axis, c.up_axis = tgt, "TRACK_NEGATIVE_Z", "UP_Y"
     sc.view_settings.exposure = -0.25
+    return cam
 
 
-def render_anim(P, pose, view, out, size, nfr, traits):
-    """a seamless loop of nfr frames at game size: breathing, head sway, an ear flick, a blink, tails swaying, foxfire bobbing"""
+def render_anim(P, pose, view, out, size, nfr, traits, motion="idle"):
+    """a seamless loop of nfr frames at game size. idle: breathing, head sway, an ear flick, a blink, tails swaying, foxfire
+    bobbing. walk: a walk cycle in place (WalkRig). Also writes anchor.json: where the fox's ground origin lands in the frame,
+    the same for every pose and motion seen from one view, so the game can swap animations without the fox jumping."""
     sc = K.setup_scene(False)
     sc.cycles.samples = int(os.environ.get("FOX_SAMPLES", "64"))
     sc.render.resolution_x, sc.render.resolution_y = size, int(round(size * 0.913))
     fox = Fox3D(P, pose, traits or {})
-    rig = FoxRig(fox)
-    stage(sc, view)
-    d = os.path.join(out, f"{pose}-{view}-idle")
+    rig = WalkRig(fox) if motion == "walk" else FoxRig(fox)
+    cam = stage(sc, view)
+    d = os.path.join(out, f"{pose}-{view}-{motion}")
     os.makedirs(d, exist_ok=True)
+    import json
+    bpy.context.view_layer.update()                    # so the camera's placement is applied before projecting
+    ax, ay = anchor_px(sc, cam, (0.0, 0.0, GROUND_Z))
+    json.dump(dict(anchor=[ax, ay], size=[sc.render.resolution_x, sc.render.resolution_y], frames=nfr, motion=motion,
+                   stride_px=(rig.stride * size / 8.0 if motion == "walk" else 0.0)), open(os.path.join(d, "anchor.json"), "w"))
     only = os.environ.get("FOX_FRAMES")
     frames = [int(x) for x in only.split(",")] if only else range(nfr)
     for f in frames:
@@ -1365,6 +1531,14 @@ if __name__ == "__main__":
             traits["tails"] = int(a.split("=")[1])
             tag = f"-t{traits['tails']}"
     anim = [a.split("=", 1)[1] for a in argv if a.startswith("--anim=")]
+    walk = [a.split("=", 1)[1] for a in argv if a.startswith("--walk=")]
+    if walk:
+        size = next((int(a.split("=")[1]) for a in argv if a.startswith("--size=")), 640)
+        nfr = next((int(a.split("=")[1]) for a in argv if a.startswith("--frames=")), 12)
+        for job in walk:
+            pose, view = job.split(":", 1)
+            render_anim(EMBER, pose, view, out, size, nfr, traits, "walk")
+        sys.exit(0)
     if anim:
         size = next((int(a.split("=")[1]) for a in argv if a.startswith("--size=")), 640)
         nfr = next((int(a.split("=")[1]) for a in argv if a.startswith("--frames=")), 24)
