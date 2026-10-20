@@ -1,0 +1,28 @@
+; Engine configuration file.
+config_version=5
+
+[application]
+config/name="Meadow prototype"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+
+[autoload]
+Game="*res://scripts/game_state.gd"
+Log="*res://scripts/event_log.gd"
+Sfx="*res://scripts/sfx.gd"
+
+[display]
+window/size/viewport_width=1024
+window/size/viewport_height=768
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=6
+
+[input_devices]
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.84, 0.92, 0.97, 1)
+
