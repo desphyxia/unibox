@@ -272,23 +272,39 @@ class Fox3D:
         self.mat_hair = self.hair_material("hair")
         self.mat_hair_glow = self.hair_material("hairglow", emit=0.45)
         self.no_fur = []                                   # (centre, radius): eyes, marks and nose stay clear of fur
+        self.blink_open, self.blink_closed = [], []         # eye pieces swapped for a blink (animation only)
+        self.parts = {}                                    # part name -> objects, for the rig
+        mark = lambda: set(bpy.data.objects)
+        m0 = mark()
         self.build_body()
+        m1 = mark()
         self.build_head()
         self.build_ears()
         self.head_bvh = self.bvh_of([ob for ob in self.head_objs])
         self.bvh = self.head_bvh                            # the face decals project onto this
         self.build_face()
+        m2 = mark()
         self.build_tails()
+        m3 = mark()
         self.ribbon_c, self.ribbon_axis = np.array([0, 0, -50.0]), np.array([0, 0, 1.0])
         if self.pose.get("ribbon"):
             self.build_ribbon()
+        m4 = mark()
         if traits.get("flowers", True):
             self.build_flower()
+        m5 = mark()
         if not os.environ.get("FOX_NOFUR"):
             self.build_fur()
             self.flush_fur()
+        m6 = mark()
+        self.fire_parts = []
         self.build_fire()
-        self.build_ground()
+        if not os.environ.get("FOX_NOGROUND"):                # game sprites: no baked ground shadow, the game draws its own
+            self.build_ground()
+        ears = [o for o in self.head_objs if o.name.startswith("ear")]
+        ear_in = [o for o in (m2 - m1) if o.name.startswith("ear_in")]
+        self.parts = dict(body=[self.body], head=[o for o in (m2 - m1) | (m5 - m4) if o not in ears and o not in ear_in],
+                          ears=ears, ear_in=sorted(ear_in, key=lambda o: o.name), tails=self.tail_objs, neck=list(m4 - m3))
 
     # ---------------------------------------------------------- head frame
     def head_matrix(self):
@@ -580,7 +596,15 @@ class Fox3D:
             if closed:
                 U.Uni3D.eye_closed(self, C, out, ex2, ez2, rx, ry * 0.9)
             else:
+                b0 = set(bpy.data.objects)
                 U.Uni3D.eye_open(self, C, out, ex2, ez2, rx, ry, sgn)
+                b1 = set(bpy.data.objects)
+                U.Uni3D.eye_closed(self, C, out, ex2, ez2, rx, ry * 0.9)
+                b2 = set(bpy.data.objects)
+                self.blink_open += list(b1 - b0)
+                self.blink_closed += list(b2 - b1)
+                for ob in b2 - b1:
+                    ob.hide_render = True
         # forehead flame: one flame that leans to the near side, not a mirrored emblem
         C, out = self.head_hit(self.Hp(0.45, 0.0, 0.72), self.Hd(0.55, 0, 1))
         self.no_fur.append((tuple(C), 0.28 * hs))
@@ -648,7 +672,7 @@ class Fox3D:
 
     # ---------------------------------------------------------- fur clumps
     # ---------------------------------------------------------- fur: real strands, combed by code
-    def strands(self, key, roots, nrm, comb, L, lift, clump, cell, c_root, c_tip, droop=0.0, K=7, rad0=0.0042, jitter=0.14):
+    def strands(self, key, roots, nrm, comb, L, lift, clump, cell, c_root, c_tip, droop=0.0, K=7, rad0=0.0042, jitter=0.14, bind=(0, 0), bind_t=None):
         """grow N hair strands from roots. comb: the direction they are brushed along the surface; lift: how far they stand off
         it; clump: how strongly neighbouring strands gather into tufts (cells of size `cell`)"""
         N = len(roots)
@@ -691,11 +715,15 @@ class Fox3D:
         c_root = np.broadcast_to(np.asarray(c_root, dtype=np.float64), (N, 3))
         c_tip = np.broadcast_to(np.asarray(c_tip, dtype=np.float64), (N, 3))
         C = c_root[:, None, :] * (1 - sv)[None, :, None] + c_tip[:, None, :] * sv[None, :, None]
-        self.fur_blocks.setdefault((key, K), []).append((Pp.astype(np.float32), R.astype(np.float32), C.astype(np.float32)))
+        kind = np.full(N, bind[0], np.int8)
+        idx = np.full(N, bind[1], np.int8)
+        tt = np.zeros(N, np.float32) if bind_t is None else np.asarray(bind_t, np.float32)
+        self.fur_blocks.setdefault((key, K), []).append((Pp.astype(np.float32), R.astype(np.float32), C.astype(np.float32), kind, idx, tt))
 
     def flush_fur(self):
         mats = {"fur": self.mat_hair, "glow": self.mat_hair_glow}
         total = 0
+        self.fur_objs = []
         for (key, K), blocks in self.fur_blocks.items():
             Pp = np.concatenate([b[0] for b in blocks])
             R = np.concatenate([b[1] for b in blocks])
@@ -712,6 +740,7 @@ class Fox3D:
             ob = bpy.data.objects.new(f"fur_{key}", cv)
             bpy.context.collection.objects.link(ob)
             cv.materials.append(mats[key])
+            self.fur_objs.append((ob, Pp, np.concatenate([b[3] for b in blocks]), np.concatenate([b[4] for b in blocks]), np.concatenate([b[5] for b in blocks])))
         print("fur strands:", total)
 
     def hair_material(self, name, emit=0.0):
@@ -825,13 +854,13 @@ class Fox3D:
         cc = c * (1 - cheek[:, None] * 0.7) + cream * cheek[:, None] * 0.7
         cc = lighten(cc, 0.08)
         self.strands("fur", p, n, comb, L, 0.05 + 0.45 * cheek + 0.5 * crown, 0.1 + 0.75 * cheek + 0.6 * crown, 0.08, cc, lighten(cc, 0.04 + 0.4 * cheek[:, None]),
-                     droop=0.1 * cheek, rad0=0.0032)
+                     droop=0.1 * cheek, rad0=0.0032, bind=(1, 0))
         # ---- ears: short fur on the back combed toward the tip, long cream tufts spilling out of the cup
-        for ob in [o for o in self.head_objs if o.name.startswith("ear")]:
+        for ei, ob in enumerate([o for o in self.head_objs if o.name.startswith("ear")]):
             p, n, c, area = self.sample(ob, int(9000 * dens))
-            self.strands("fur", p, n, self.ear_axis_world(p), 0.035, 0.1, 0.1, 0.05, c, lighten(c, 0.1), rad0=0.0032)
+            self.strands("fur", p, n, self.ear_axis_world(p), 0.035, 0.1, 0.1, 0.05, c, lighten(c, 0.1), rad0=0.0032, bind=(2, ei))
         cvec, Rm = self.head_matrix()
-        for sgn, (b, t, axis, facing, across, Lr, w) in self.ear_tips.items():
+        for ei, (sgn, (b, t, axis, facing, across, Lr, w)) in enumerate(self.ear_tips.items()):
             N = int(700 * dens)
             u = self.nrng.random(N) * 0.4 + 0.03
             a = self.nrng.uniform(-0.75, 0.75, N)
@@ -841,10 +870,10 @@ class Fox3D:
             nn = np.tile(self.head_dirs(np.array(facing)[None, :]), (N, 1))
             dd = self.head_dirs(np.array(axis)[None, :] * 0.9 + np.array(facing)[None, :] * 0.2) + self.head_dirs(np.array(across)[None, :]) * a[:, None] * 0.45
             Lx = (0.12 + 0.14 * (1 - u)) * self.hs
-            self.strands("fur", roots, nn, dd, Lx, 0.15, 0.75, 0.06, np.tile(lighten(np.array(srgb(P["ear_in"])), 0.3), (N, 1)), np.tile(lighten(cream, 0.5), (N, 1)), rad0=0.003)
+            self.strands("fur", roots, nn, dd, Lx, 0.15, 0.75, 0.06, np.tile(lighten(np.array(srgb(P["ear_in"])), 0.3), (N, 1)), np.tile(lighten(cream, 0.5), (N, 1)), rad0=0.003, bind=(2, ei))
         # ---- tails
-        for cl, radii, rad, R, ground in self.tail_cores:
-            self.tail_fur(cl, radii, rad, R, ground)
+        for ti, (cl, radii, rad, R, ground) in enumerate(self.tail_cores):
+            self.tail_fur(cl, radii, rad, R, ground, ti)
 
     def ear_axis_world(self, p):
         """comb direction on an ear: toward its tip"""
@@ -857,7 +886,7 @@ class Fox3D:
             out[sel] = tw - p[sel]
         return out
 
-    def tail_fur(self, cl, radii, rad, R, ground):
+    def tail_fur(self, cl, radii, rad, R, ground, ti=0):
         """dense fur combed toward the tip, flaring out where the tail is thick; at the tip it gathers into a curling flame"""
         P, rng = self.P, self.nrng
         cream, glow = srgb(P["cream"]), srgb(P["tip_glow"])
@@ -906,7 +935,8 @@ class Fox3D:
         clump = 0.62 + 0.3 * tipw
         glowing = t > 0.84
         for sel, key in ((~glowing, "fur"), (glowing, "glow")):
-            self.strands(key, roots[sel], radial[sel], comb[sel], L[sel], 0.2, clump[sel], 0.15, c0[sel], c1[sel], droop=0.05, K=9, rad0=0.0045, jitter=0.12)
+            self.strands(key, roots[sel], radial[sel], comb[sel], L[sel], 0.2, clump[sel], 0.15, c0[sel], c1[sel], droop=0.05, K=9, rad0=0.0045, jitter=0.12,
+                         bind=(3, ti), bind_t=t[sel])
 
     def build_tails(self):
         P, rnd = self.P, self.rnd
@@ -916,6 +946,7 @@ class Fox3D:
         order = [0, 1, 2, 1, 1, 1, 1, 1, 1][: self.n_tails]
         self.tail_tips = []
         self.tail_cores = []
+        self.tail_objs = []
         for ti in range(self.n_tails):
             ctrl, R, ground = tails[order[ti]]
             ctrl = [Vector(c) for c in ctrl]
@@ -943,7 +974,7 @@ class Fox3D:
                 t = i / (n - 1)
                 c = self.tail_color(t, cream, glow)
                 cols.extend([lin(c)] * 18)
-            add_object("tail", v, f, cols, self.mat_coat)
+            self.tail_objs.append((add_object("tail", v, f, cols, self.mat_coat), n, 18))
             self.tail_cores.append((cl, radii, rad, R, ground))
             tip, tg = cl[-1], (cl[-1] - cl[-4]).normalized()
             self.tail_tips.append((tip, tg))
@@ -1078,7 +1109,9 @@ class Fox3D:
     def build_fire(self):
         for k, (x, y, z, s) in enumerate(self.pose["fire"]):
             lean = Vector((0.5 if k % 2 else -0.6, 0, 0)) + Vector((0, 0.2, 0))
+            b0 = set(bpy.data.objects)
             self.flame(Vector((x, y, z)), s, lean)
+            self.fire_parts.append((Vector((x, y, z)), s, list(set(bpy.data.objects) - b0)))
 
     def build_ground(self):
         me = bpy.data.meshes.new("ground")
@@ -1086,6 +1119,202 @@ class Fox3D:
         ob = bpy.data.objects.new("ground", me)
         bpy.context.collection.objects.link(ob)
         ob.is_shadow_catcher = True
+
+
+# ------------------------------------------------------------------ rig: smooth weights on the built model, for looping animation
+def _rot(axis, ang):
+    axis = np.asarray(axis, np.float64)
+    axis = axis / np.linalg.norm(axis)
+    x, y, z = axis
+    c, s_, C = math.cos(ang), math.sin(ang), 1 - math.cos(ang)
+    return np.array([[c + x * x * C, x * y * C - z * s_, x * z * C + y * s_],
+                     [y * x * C + z * s_, c + y * y * C, y * z * C - x * s_],
+                     [z * x * C - y * s_, z * y * C + x * s_, c + z * z * C]])
+
+
+class FoxRig:
+    """Moves the finished fox without rebuilding it: every surface point and fur strand follows the head, ears, tails, breathing
+    chest or foxfire it belongs to, with smooth weights where parts meet. Fur strands move with the skin they grow from, so they
+    never jump between frames. All motions are periodic over the loop."""
+
+    def __init__(self, fox):
+        self.fox = fox
+        hx, hy, hz = fox.pose["head"]
+        self.hc = np.array([hx, hy, hz])
+        top = np.array(fox.pose["spine"][-1][:3])
+        self.pivot = top + (self.hc - top) * 0.45
+        self.spine = np.array([tuple(p) for p in fox.spine_pts])
+        self.meshes = []                                    # (object, rest coords, kind, extra)
+        for part, obs in fox.parts.items():
+            if part == "tails":
+                for ti, (ob, n, segs) in enumerate(obs):
+                    co = self.co(ob)
+                    t = (np.arange(len(co)) // segs) / max(n - 1, 1)
+                    self.meshes.append((ob, co, "tail", (ti, np.minimum(t, 1.0))))
+                continue
+            for i, ob in enumerate(obs):
+                if ob.type != "MESH":
+                    continue
+                kind = {"body": "body", "neck": "body", "head": "head", "ears": "ear", "ear_in": "ear"}[part]
+                self.meshes.append((ob, self.co(ob), kind, i % 2 if kind == "ear" else None))
+        self.fires = [(np.array(tuple(base)), sz, [(ob, self.co(ob)) for ob in obs if ob.type == "MESH"]) for base, sz, obs in fox.fire_parts]
+        self.tail_roots = [np.array(tuple(c[0][0])) for c in fox.tail_cores]
+        self.tail_amp = [math.radians(4.0 if c[4] else 8.0) for c in fox.tail_cores]
+        self.ears = []
+        for sgn, (b, t, axis, facing, across, Lr, w) in fox.ear_tips.items():
+            self.ears.append((np.array(tuple(fox.Hp(*b))), np.array(tuple(fox.Hd(*across)))))
+        self.fur = getattr(fox, "fur_objs", [])
+
+    @staticmethod
+    def co(ob):
+        n = len(ob.data.vertices)
+        a = np.empty(n * 3, np.float32)
+        ob.data.vertices.foreach_get("co", a)
+        return a.reshape(n, 3).astype(np.float64)
+
+    # ---- the motions at loop phase ph (0..2pi)
+    def head_tf(self, ph):
+        R = _rot((0, 0, 1), math.radians(3.0) * math.sin(ph + 0.8)) @ _rot((1, 0, 0), math.radians(2.6) * math.sin(ph)) \
+            @ _rot((0, 1, 0), math.radians(1.6) * math.sin(2 * ph))
+        return lambda p: (p - self.pivot) @ R.T + self.pivot
+
+    def ear_tf(self, ei, f, nfr):
+        b, ax = self.ears[ei]
+        # the near ear gives a quick flick early in the loop; the far ear only sways gently
+        if ei == 0:
+            u = (f / nfr) * 24.0
+            ang = math.radians(14) * math.exp(-((u - 6.0) / 1.2) ** 2)
+        else:
+            ang = math.radians(2.5) * math.sin(2 * math.pi * f / nfr + 2.0)
+        R = _rot(ax, -ang)
+        return lambda p: (p - b) @ R.T + b
+
+    def tail_tf(self, ti, ph):
+        root, amp = self.tail_roots[ti], self.tail_amp[ti]
+
+        def tf(p, t):
+            a = amp * np.sin(ph + 1.3 * ti - 2.4 * t) * t ** 1.3
+            c, s_ = np.cos(a), np.sin(a)
+            d = p - root
+            out = d.copy()
+            out[:, 0] = d[:, 0] * c - d[:, 1] * s_
+            out[:, 1] = d[:, 0] * s_ + d[:, 1] * c
+            return out + root
+        return tf
+
+    def body_tf(self, ph, H):
+        """breathing (the chest swells a little) plus a smooth blend into the head motion near the neck"""
+        sp = self.spine
+        breath = 0.028 * math.sin(ph)
+
+        def tf(p):
+            d2 = ((p[:, None, :] - sp[None, ::2, :]) ** 2).sum(-1)
+            j = np.argmin(d2, axis=1) * 2
+            u = j / (len(sp) - 1)
+            radial = p - sp[j]
+            w = np.exp(-((u - 0.55) / 0.3) ** 2) * ss(1.2, 0.6, np.linalg.norm(radial, axis=1))
+            q = p + radial * (breath * w)[:, None]
+            wh = ss(1.55, 0.95, np.linalg.norm(p - self.hc, axis=1) / self.fox.hs)
+            return q + (H(q) - q) * wh[:, None]
+        return tf
+
+    def frame(self, f, nfr):
+        ph = 2 * math.pi * f / nfr
+        H = self.head_tf(ph)
+        B = self.body_tf(ph, H)
+        for ob, co, kind, extra in self.meshes:
+            if kind == "body":
+                new = B(co)
+            elif kind == "head":
+                new = H(co)
+            elif kind == "ear":
+                new = H(self.ear_tf(extra, f, nfr)(co))
+            else:
+                ti, t = extra
+                new = self.tail_tf(ti, ph)(co, t)
+            ob.data.vertices.foreach_set("co", new.astype(np.float32).ravel())
+            ob.data.update()
+        for k, (base, sz, items) in enumerate(self.fires):
+            lift = np.array([0.05 * math.sin(ph * 2 + 1.7 * k), 0.0, 0.09 * math.sin(ph + 2.1 * k)])
+            sc = 1 + 0.06 * math.sin(3 * ph + k)
+            for ob, co in items:
+                new = (co - base) * np.array([sc, sc, 1 + 0.1 * math.sin(3 * ph + k)]) + base + lift
+                ob.data.vertices.foreach_set("co", new.astype(np.float32).ravel())
+                ob.data.update()
+        for ob, P0, kind, idx, tt in self.fur:
+            N, K, _ = P0.shape
+            new = P0.astype(np.float64).copy()
+            sel = kind == 0
+            if sel.any():
+                roots = new[sel, 0, :]
+                new[sel] += (B(roots) - roots)[:, None, :]
+            sel = kind == 1
+            if sel.any():
+                new[sel] = H(new[sel].reshape(-1, 3)).reshape(-1, K, 3)
+            for ei in range(len(self.ears)):
+                sel = (kind == 2) & (idx == ei)
+                if sel.any():
+                    new[sel] = H(self.ear_tf(ei, f, nfr)(new[sel].reshape(-1, 3))).reshape(-1, K, 3)
+            for ti in range(len(self.tail_roots)):
+                sel = (kind == 3) & (idx == ti)
+                if sel.any():
+                    t = (tt[sel][:, None] + 0.08 * np.linspace(0, 1, K)[None, :]).reshape(-1)
+                    new[sel] = self.tail_tf(ti, ph)(new[sel].reshape(-1, 3), np.minimum(t, 1.0)).reshape(-1, K, 3)
+            ob.data.position_data.foreach_set("vector", new.astype(np.float32).ravel())
+            ob.data.update_tag()
+        closed = f in self.blink_frames(nfr)
+        for ob in self.fox.blink_open:
+            ob.hide_render = closed
+        for ob in self.fox.blink_closed:
+            ob.hide_render = not closed
+
+    @staticmethod
+    def blink_frames(nfr):
+        a = int(round(nfr * 15 / 24))
+        return {a, a + 1}
+
+
+def stage(sc, view, zoom=None):
+    """camera and lights shared by stills and animation"""
+    center = Vector((-0.3, 0, 3.05)) if zoom is None else Vector((zoom[0], 0, zoom[1]))
+    tgt = bpy.data.objects.new("target", None)
+    bpy.context.collection.objects.link(tgt)
+    tgt.location = center
+    az = {"side": 0, "front": 90, "back": -90, "three": 40}[view]
+    cam = K.make_camera(sc, az, center, ortho=8.0 if zoom is None else zoom[2])
+    pitch = math.radians(9)
+    a = math.radians(az)
+    cam.location = center + Vector((math.sin(a) * math.cos(pitch), -math.cos(a) * math.cos(pitch), math.sin(pitch))) * 40.0
+    cam.rotation_euler = (math.radians(90) - pitch, 0, a)
+    K.add_lights(cam, tgt)
+    for nm, energy, size, color, loc in (("top", 420, 12.0, (1, 1, 1), (0.5, 0.3, 11.0)), ("bounce", 480, 16.0, (1.0, 0.95, 0.93), (1.0, -8.0, 0.9))):
+        ld = bpy.data.lights.new(nm, "AREA")
+        ld.energy, ld.size, ld.color = energy, size, color
+        ob = bpy.data.objects.new(nm, ld)
+        bpy.context.collection.objects.link(ob)
+        ob.location = loc
+        c = ob.constraints.new("TRACK_TO")
+        c.target, c.track_axis, c.up_axis = tgt, "TRACK_NEGATIVE_Z", "UP_Y"
+    sc.view_settings.exposure = -0.25
+
+
+def render_anim(P, pose, view, out, size, nfr, traits):
+    """a seamless loop of nfr frames at game size: breathing, head sway, an ear flick, a blink, tails swaying, foxfire bobbing"""
+    sc = K.setup_scene(False)
+    sc.cycles.samples = int(os.environ.get("FOX_SAMPLES", "64"))
+    sc.render.resolution_x, sc.render.resolution_y = size, int(round(size * 0.913))
+    fox = Fox3D(P, pose, traits or {})
+    rig = FoxRig(fox)
+    stage(sc, view)
+    d = os.path.join(out, f"{pose}-{view}-idle")
+    os.makedirs(d, exist_ok=True)
+    only = os.environ.get("FOX_FRAMES")
+    frames = [int(x) for x in only.split(",")] if only else range(nfr)
+    for f in frames:
+        rig.frame(f, nfr)
+        sc.render.filepath = os.path.join(d, f"frame_{f:02d}.png")
+        bpy.ops.render.render(write_still=True)
+        print("rendered", sc.render.filepath)
 
 
 def render_job(P, pose, view, out, quick, traits=None, tag=""):
@@ -1135,6 +1364,14 @@ if __name__ == "__main__":
         if a.startswith("--tails="):
             traits["tails"] = int(a.split("=")[1])
             tag = f"-t{traits['tails']}"
+    anim = [a.split("=", 1)[1] for a in argv if a.startswith("--anim=")]
+    if anim:
+        size = next((int(a.split("=")[1]) for a in argv if a.startswith("--size=")), 640)
+        nfr = next((int(a.split("=")[1]) for a in argv if a.startswith("--frames=")), 24)
+        for job in anim:
+            pose, view = job.split(":", 1)
+            render_anim(EMBER, pose, view, out, size, nfr, traits)
+        sys.exit(0)
     jobs = [a for a in argv[1:] if ":" in a] or ["sit:side", "sit:three", "sit:front", "sit:back", "stand:side", "stand:three", "play:side", "play:three", "sleep:side", "sleep:three"]
     for job in jobs:
         pose, view = job.split(":", 1)
