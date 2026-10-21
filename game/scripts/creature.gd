@@ -1,7 +1,9 @@
 class_name Creature
 extends Touchable
 ## A creature in the meadow, played from rendered animations: an idle loop when sitting, a walk cycle when moving, and
-## one-shot clips for eating, being petted (happy), the hunger cue, dozing off, sleeping and turning round.
+## one-shot clips for eating, being petted (happy), the hunger cue, dozing off, sleeping and turning round. Every
+## animation is rendered facing each way ("eat" and "eat_left"); the turns run the whole way round, from one side's rest
+## pose to the other's ("turn_sit" from the right, "turn_sit_left" from the left). Without left frames it mirrors.
 ## Touch: tap to pet, drag to walk it somewhere. main.gd also calls it to a tapped spot and hands it food.
 
 signal petted
@@ -25,9 +27,9 @@ var meadow: Node2D                     ## main.gd: effects layer, the tree, isla
 
 var body := Node2D.new()               ## lift and tilt, pivot at the feet
 var squash := Node2D.new()             ## squash and stretch, times the depth scale
-var flip := Node2D.new()               ## faces left or right
+var flip := Node2D.new()               ## mirrors the right-facing frames, only when there are no left ones
 var sprite := AnimatedSprite2D.new()
-var ghost := Sprite2D.new()            ## the previous frame, fading out: hides the mirror swap mid-turn and the change into sleep
+var ghost := Sprite2D.new()            ## the previous frame, fading out: softens the change into and out of sleep
 var shadow := Sprite2D.new()
 
 var lift := 0.0                        ## animated by tweens
@@ -43,7 +45,7 @@ var busy := false                      ## reacting or eating: stands still
 var turning := false
 var asleep := false
 var food_target: Node2D = null         ## an apple on the ground it is walking to
-var _clip := {}                        ## the one-shot clip playing: anim, seq (frame numbers), i, t, fps, events, flip_at
+var _clip := {}                        ## the one-shot clip playing: anim, seq (frame numbers), i, t, fps, events, face
 var _hop := 0.0
 var _walk_amount := 0.0
 var _idle_for := 0.0
@@ -106,7 +108,7 @@ func mouth_world() -> Vector2:
 
 
 func top_world() -> Vector2:
-	var curled := 190.0 if asleep and sprite.animation == "sleep" else 0.0      ## curled up asleep, the head is much lower
+	var curled := 190.0 if asleep and _base() == "sleep" else 0.0      ## curled up asleep, the head is much lower
 	return position + Vector2(0, (TOP_R + curled - FEET_R.y + _ref.y) * depth_scale() - lift)
 
 
@@ -149,23 +151,42 @@ func _has(anim: String) -> bool:
 	return anims.has(anim)
 
 
-func _begin(anim: String, seq: Array, fps: float, events := {}, flip_at := -1) -> void:
-	var info: Dictionary = anims[anim]
+func _side(anim: String) -> String:
+	## the frames for the way it faces now
+	if facing < 0 and anims.has(anim + "_left"):
+		return anim + "_left"
+	return anim
+
+
+func _base() -> String:
+	## the animation playing, whichever way it faces
+	return String(sprite.animation).trim_suffix("_left")
+
+
+func _place_frames(name: String) -> void:
+	var info: Dictionary = anims[name]
+	sprite.offset = -Vector2(info["anchor"][0], info["anchor"][1])
+	flip.scale.x = -1.0 if facing < 0 and not name.ends_with("_left") else 1.0
+
+
+func _begin(anim: String, seq: Array, fps: float, events := {}, face := 0.0) -> void:
+	## anim is the exact frames to play (already "_left" or not); face, if set, is the way it faces once the clip ends
 	sprite.stop()
 	sprite.animation = anim
-	sprite.offset = -Vector2(info["anchor"][0], info["anchor"][1])
+	_place_frames(anim)
 	sprite.frame = seq[0]
-	_clip = {"anim": anim, "seq": seq, "i": 0, "t": 0.0, "fps": fps, "events": events, "flip_at": flip_at}
+	_clip = {"anim": anim, "seq": seq, "i": 0, "t": 0.0, "fps": fps, "events": events, "face": face}
 	if events.has(0):
 		events[0].call()
 
 
 func play_clip(anim: String, fps := 12.0, reverse := false, events := {}) -> void:
 	## plays a one-shot clip and waits for it; events are {frame index: Callable}
-	var seq := range(sprite.sprite_frames.get_frame_count(anim))
+	var name := _side(anim)
+	var seq := range(sprite.sprite_frames.get_frame_count(name))
 	if reverse:
 		seq.reverse()
-	_begin(anim, seq, fps, events)
+	_begin(name, seq, fps, events)
 	await clip_finished
 
 
@@ -176,16 +197,15 @@ func _step_clip(delta: float) -> void:
 		_clip["i"] += 1
 		var seq: Array = _clip["seq"]
 		if _clip["i"] >= seq.size():
+			var face: float = _clip["face"]
 			_clip = {}
+			if face != 0.0:
+				facing = face
 			clip_finished.emit()
 			# nothing chained another clip: back to the right loop
-			if _clip.is_empty() and not LOOPS.has(sprite.animation):
-				_play("sleep" if asleep else ("walk" if target != null and not busy and not turning else "idle"), true)
+			if _clip.is_empty() and (face != 0.0 or not LOOPS.has(_base())):
+				_play("sleep" if asleep else ("walk" if target != null and not busy else "idle"), true)
 			return
-		if _clip["i"] == _clip["flip_at"]:
-			_fade_out_current()
-			facing = -facing
-			flip.scale.x = facing
 		sprite.frame = seq[_clip["i"]]
 		var ev: Dictionary = _clip["events"]
 		if ev.has(_clip["i"]):
@@ -205,22 +225,20 @@ func _fade_out_current(time := 0.18) -> void:
 
 
 func turn_to(f: float) -> void:
-	## turn round on the spot: the rendered half-turn to face the camera, then the same frames mirrored and backward
+	## turn round on the spot, through facing the camera: a rendered clip from this side's rest pose to the other side's
 	if f == facing or turning:
 		return
-	var standing := sprite.animation == "walk"
-	var anim := "turn_stand" if standing else "turn_sit"
-	if not _has(anim):
+	var standing := _base() == "walk"
+	var anim := ("turn_stand" if standing else "turn_sit") + ("" if facing > 0 else "_left")
+	if not _has(anim) or (f < 0 and not _has("idle_left")):
+		# no turn rendered for this side: flip over quickly
 		facing = f
+		_play(_base() if LOOPS.has(_base()) else "idle", true)
 		var tw := create_tween()
-		tw.tween_property(flip, "scale:x", facing, 0.16).from(-facing * 0.2)
+		tw.tween_property(self, "squash_v:x", 1.0, 0.16).from(0.2)
 		return
 	turning = true
-	var n := sprite.sprite_frames.get_frame_count(anim)
-	var seq := range(n)
-	for k in range(n - 2, -1, -1):
-		seq.append(k)
-	_begin(anim, seq, 24.0 if standing else 18.0, {}, n)
+	_begin(anim, range(sprite.sprite_frames.get_frame_count(anim)), 28.0 if standing else 22.0, {}, f)
 	await clip_finished
 	turning = false
 
@@ -254,6 +272,11 @@ func fall_asleep() -> void:
 	_crossfade_to_loop("sleep")
 	Log.event("creature_sleep", "")
 	busy = false
+
+
+func bedtime() -> void:
+	## the child chose night with the moon button: no staying up, it settles down as soon as it is calm
+	_stay_awake_until = 0.0
 
 
 func wake() -> void:
@@ -433,10 +456,10 @@ func appear(from: Vector2) -> void:
 
 func _play(anim: String, quiet := false) -> void:
 	## start a loop around the shared anchor; a small squash hides the change from walking to sitting
-	var info: Dictionary = anims[anim]
-	sprite.offset = -Vector2(info["anchor"][0], info["anchor"][1])
+	var name := _side(anim)
+	_place_frames(name)
 	sprite.speed_scale = 1.0
-	sprite.play(anim)
+	sprite.play(name)
 	if anim == "idle" and not busy and not quiet:
 		var t := create_tween()
 		t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.07)
@@ -475,7 +498,7 @@ func _process(delta: float) -> void:
 	if has_walk and _clip.is_empty() and not asleep:
 		if moving:
 			_still_for = 0.0
-			if sprite.animation != "walk":
+			if _base() != "walk":
 				_play("walk")
 			var w: Dictionary = anims["walk"]
 			# cycles per second so a paw on the ground keeps pace with the meadow
@@ -483,7 +506,7 @@ func _process(delta: float) -> void:
 			sprite.speed_scale = clampf(w["stance"] * v / (w["stride"] * depth_scale()), 0.4, 3.0)
 		else:
 			_still_for += delta
-			if sprite.animation == "walk" and _still_for > 0.12 and target == null:
+			if _base() == "walk" and _still_for > 0.12 and target == null:
 				_play("idle")
 	_walk_amount = move_toward(_walk_amount, 1.0 if (moving and not has_walk) else 0.0, delta * 6.0)
 	if moving and not has_walk:
@@ -495,7 +518,7 @@ func _process(delta: float) -> void:
 	squash.scale = squash_v * s
 	var info: Dictionary = anims[sprite.animation]
 	shadow.scale = Vector2(info["shadow"][1], info["shadow"][1] * 0.17) / 256.0 * s * (1.0 - clampf((lift + hop) / 160.0, 0.0, 0.35))
-	shadow.position = Vector2(info["shadow"][0] * facing, -4) * s
+	shadow.position = Vector2(info["shadow"][0] * flip.scale.x, -4) * s
 	var calm := target == null and not busy and not turning and not _dragging and _clip.is_empty()
 	# bedtime: it dozes off at night and wakes at dawn
 	var night: bool = meadow != null and meadow.time != null and meadow.time.is_night()

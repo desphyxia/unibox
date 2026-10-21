@@ -23,6 +23,7 @@ var creature: Creature
 var tag: NameTag
 var time: IslandTime
 var ui: ParentUI
+var sky: SkyButton                          ## the sun or moon in the corner: switches between day and night
 var frames: SpriteFrames
 var anim_info := {}                         ## animation name -> its anim.json (anchor, shadow, stride)
 var _spots_used := {}
@@ -33,12 +34,22 @@ var _finger := -1                           ## the touch being followed; Safari 
 
 func _ready() -> void:
 	randomize()
-	frames = _load_frames("res://art/creatures/%s" % Game.kind, ["idle", "walk", "sleep", "eat", "happy", "hunger", "doze", "turn_sit", "turn_stand"])
+	var names := []
+	for anim in ["idle", "walk", "sleep", "eat", "happy", "hunger", "doze", "turn_sit", "turn_stand"]:
+		names.append_array([anim, anim + "_left"])       ## each also rendered facing left (the turns: from the left)
+	frames = _load_frames("res://art/creatures/%s" % Game.kind, names)
 	_build_world()
 	ui = ParentUI.new()
 	add_child(ui)
 	ui.new_session_requested.connect(_new_session)
 	ui.time_speed_changed.connect(func(s): time.speed = s)
+	var sky_layer := CanvasLayer.new()
+	sky_layer.layer = 5
+	add_child(sky_layer)
+	sky = SkyButton.new()
+	sky.time = time
+	sky_layer.add_child(sky)
+	time.switched.connect(func(night: bool): if creature and night: creature.bedtime())
 	Game.name_changed.connect(func(n): if tag: tag.set_text(n))
 	Game.settings_changed.connect(func(): if creature: creature.temperament = Game.temperament)
 	get_viewport().size_changed.connect(_layout)
@@ -58,7 +69,7 @@ func _load_frames(folder: String, names: Array) -> SpriteFrames:
 		anim_info[anim] = info
 		f.add_animation(anim)
 		f.set_animation_speed(anim, float(info.get("fps", 12.0)))
-		f.set_animation_loop(anim, Creature.LOOPS.has(anim))
+		f.set_animation_loop(anim, Creature.LOOPS.has(anim.trim_suffix("_left")))
 		var i := 0
 		while ResourceLoader.exists("%s/frame_%02d.png" % [dir, i]):
 			f.add_frame(anim, load("%s/frame_%02d.png" % [dir, i]))
@@ -254,6 +265,9 @@ func _unhandled_input(e: InputEvent) -> void:
 			return
 		if ui.corner_rect().has_point(e.position):
 			_finger = -1
+			return
+		if e.pressed and _finger == -1 and sky.hit(e.position):
+			sky.tap()                               ## its lift is then ignored: no finger is being followed
 			return
 		var p := _to_world(e.position)
 		if e.pressed:

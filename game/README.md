@@ -16,7 +16,7 @@ bounce and glow. It repeats every 22 seconds until the fox is fed, then comes ba
 happens if it's ignored. Variant B shows no cues.
 
 Island time runs from dawn to dusk in about ten minutes, then has a short night. At night the fox dozes off and
-sleeps until dawn; a tap wakes it.
+sleeps until dawn; a tap wakes it. The sun or moon in the top-left corner switches between day and night.
 
 ## For the facilitator
 Press and hold the dots in the top-right corner, answer the grown-ups question, and the parent area opens. In it:
@@ -33,7 +33,8 @@ name and no identifiers.
 ## Stand-ins
 - Rendered: the sitting idle loop, a walk cycle, eating, a happy wiggle, the hunger look and sigh, dozing off, a
   sleep loop, and turning round (sitting or standing). The walk plays at the speed that keeps a paw on the ground in
-  step with the meadow. A turn plays the rendered half-turn to the camera, then the same frames mirrored.
+  step with the meadow. Every animation is rendered facing each way (folders ending `_left`); a turn
+  plays a rendered clip that runs from one side's rest pose round to the other's.
 - The meadow art is drawn from code (`art/generators/meadow.py`).
 - The sounds are synthesised (`art/generators/sfx.py`).
 - There's no music yet.

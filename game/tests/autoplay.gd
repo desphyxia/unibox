@@ -91,14 +91,27 @@ func _ready() -> void:
 	main.time.hour = 18.4
 	await wait(0.5)
 	await shot("dusk")
-	main.time.hour = 22.0
-	await wait(0.5)
+	# the sun button hurries on to night; the creature dozes off
+	await tap(main.sky.position + main.sky.size / 2.0)
+	await wait(1.2)
+	await shot("sky-switching")
+	await wait(1.6)
 	await shot("night")
 	await wait(3.5)
 	await shot("asleep")
 	await tap(w(c.position + Vector2(20, -60)))
 	await wait(1.6)
 	await shot("woken")
+	# the moon button brings the morning
+	await wait(1.0)
+	await tap(main.sky.position + main.sky.size / 2.0)
+	await wait(3.0)
+	await shot("morning")
+	# turn back to the right, standing
+	await tap(w(Vector2(850, 640)))
+	for k in 4:
+		await wait(0.1)
+		await shot("turn-back-%d" % k)
 	print("AUTOPLAY DONE log=", ProjectSettings.globalize_path(Log.path))
 	get_tree().quit()
 

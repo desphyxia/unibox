@@ -23,6 +23,11 @@ from seahorse3d import srgb, lin, mix, smooth, grad, loft, ellipsoid, tube, mate
 from unicorn3d import add_object
 
 GROUND_Z = 0.42
+# FOX_FACE=left renders the fox turned round to face left (the game used to mirror the right-facing frames, which swapped
+# the one-sided details: the ear flower, the tails' sweep, the foxfire). The turn is a rotation about the ground point
+# that equals the mirrored view for everything symmetric; the head's own turn toward the camera is mirrored on top.
+FACE_LEFT = os.environ.get("FOX_FACE") == "left"
+TURN_DEG = 100.0                        # from facing right to facing left, seen from the three-quarter camera
 MUZZLE_TIP = 1.6                                           # head-local x of the nose tip
 NEAR = -1                                                   # the camera side in the side and three-quarter views
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
@@ -1143,6 +1148,7 @@ class FoxRig:
         self.hc = np.array([hx, hy, hz])
         top = np.array(fox.pose["spine"][-1][:3])
         self.pivot = top + (self.hc - top) * 0.45
+        self.head_fix = np.eye(3)                           # facing left: the pose's head turn, mirrored (see left_head_fix)
         self.spine = np.array([tuple(p) for p in fox.spine_pts])
         self.meshes = []                                    # (object, rest coords, kind, extra)
         for part, obs in fox.parts.items():
@@ -1176,6 +1182,7 @@ class FoxRig:
     def head_tf(self, ph):
         R = _rot((0, 0, 1), math.radians(3.0) * math.sin(ph + 0.8)) @ _rot((1, 0, 0), math.radians(2.6) * math.sin(ph)) \
             @ _rot((0, 1, 0), math.radians(1.6) * math.sin(2 * ph))
+        R = self.head_fix @ R
         return lambda p: (p - self.pivot) @ R.T + self.pivot
 
     def ear_tf(self, ei, f, nfr):
@@ -1374,6 +1381,7 @@ class WalkRig(FoxRig):
         lift = np.array([0, 0, bob])
         R = _rot((0, 0, 1), math.radians(1.5) * math.sin(ph)) @ _rot((1, 0, 0), math.radians(1.2) * math.sin(ph + 0.6)) \
             @ _rot((0, 1, 0), math.radians(2.2) * math.sin(2 * ph + 0.9))
+        R = self.head_fix @ R
         H = lambda p: (p - self.pivot) @ R.T + self.pivot + lift
         B0 = self.body_tf(ph, lambda p: (p - self.pivot) @ R.T + self.pivot)
         B = lambda p: B0(p) + lift
@@ -1447,10 +1455,8 @@ class ReactRig(FoxRig):
       hunger  looks up with ears perked, then a sigh: the head sinks, a slow blink
       doze    the head sinks and the eyes close; ends asleep sitting up (the game then fades to the sleep loop)
       sleep   the curled-up loop: slow deep breathing, a faint head sway
-      turn    half a turn on the spot, from facing right to facing the camera. The game plays it forward, then mirrored and
-              backward, so the fox ends facing left (and the reverse for left to right)."""
-
-    HALF_TURN = 50.0                    # degrees from the three-quarter view to facing the camera (the camera is at 40)
+      turn    a whole turn on the spot, through facing the camera: right to left, or left to right with FOX_FACE=left.
+              It ends on the other side's rest pose, so the game cuts to that side's frames without a jump."""
 
     def __init__(self, fox, motion):
         super().__init__(fox)
@@ -1459,11 +1465,11 @@ class ReactRig(FoxRig):
         self.whole = [o for o in bpy.data.objects if o.type in ("MESH", "CURVES", "CURVE") and not o.name.startswith("ground")]
         # undo the pose's own head turn at the front-facing frame, so it mirrors cleanly
         self.head_rot = fox.pose.get("head_rot", (0, 0, 0))
+        self.base_turn = 0.0
 
     def clip_u(self, f, nfr):
-        if self.motion == "turn":
-            return f / (2 * (nfr - 1))                     # the rendered half: 0 .. 0.5 of the whole turn
-        if self.motion == "doze":
+        if self.motion in ("turn", "doze"):
+            return f / (nfr - 1)                           # ends on its last frame
             return f / (nfr - 1)                           # ends on its last frame
         return f / nfr
 
@@ -1494,13 +1500,17 @@ class ReactRig(FoxRig):
         elif m == "sleep":
             p.update(sway=0.3, breath=0.02 * math.sin(2 * math.pi * u))
         elif m == "turn":
-            # s runs 0..0.5 over the rendered half; the whole turn eases in and out, so the middle is the fastest part
+            # the whole turn, from facing right to facing left (FACE_LEFT: the other way). It eases in and out, so the middle,
+            # facing the camera, is the fastest part. The head leads and the tails trail; the head's own turn toward the camera
+            # swings over to the other side, so the last frame is the other side's rest pose exactly (see left_head_fix).
             s = u
             e = s * s * s * (s * (6 * s - 15) + 10)
+            w = 1.0 - e if FACE_LEFT else e                                    # 0 facing right, 1 facing left
+            sg = -1.0 if FACE_LEFT else 1.0
             mid = math.sin(math.pi * s) ** 2                                  # 0 at rest, 1 when facing the camera
             hp, hy, hr = self.head_rot
-            p.update(turn=-d(2 * self.HALF_TURN) * e, lift=0.12 * mid, yaw=-d(9) * math.sin(2 * math.pi * s) + d(-hy) * mid,
-                     roll=d(-hr) * mid, tail_turn=d(12) * math.sin(2 * math.pi * s), ear=d(6) * mid, sway=1.0 - mid)
+            p.update(turn=-d(TURN_DEG) * w, lift=0.12 * mid, yaw=-sg * d(9) * math.sin(2 * math.pi * s) + d(-2 * hy) * w,
+                     roll=d(-2 * hr) * w, tail_turn=sg * d(12) * math.sin(2 * math.pi * s), ear=d(6) * mid, sway=1.0 - mid)
         return p
 
     # ---- the idle motions, plus the clip's curves
@@ -1508,7 +1518,7 @@ class ReactRig(FoxRig):
         c, k = self.cur, self.cur.get("sway", 1.0)
         R0 = _rot((0, 0, 1), math.radians(3.0) * k * math.sin(ph + 0.8)) @ _rot((1, 0, 0), math.radians(2.6) * k * math.sin(ph)) \
             @ _rot((0, 1, 0), math.radians(1.6) * k * math.sin(2 * ph))
-        R = _rot((0, 0, 1), c.get("yaw", 0.0)) @ _rot((1, 0, 0), c.get("roll", 0.0)) @ _rot((0, 1, 0), c.get("pitch", 0.0)) @ R0
+        R = self.head_fix @ _rot((0, 0, 1), c.get("yaw", 0.0)) @ _rot((1, 0, 0), c.get("roll", 0.0))             @ _rot((0, 1, 0), c.get("pitch", 0.0)) @ R0
         return lambda p: (p - self.pivot) @ R.T + self.pivot
 
     def ear_tf(self, ei, f, nfr):
@@ -1564,7 +1574,7 @@ class ReactRig(FoxRig):
             for ob in self.fox.blink_closed:
                 ob.hide_render = not self.cur["closed"]
         for ob in self.whole:                               # the whole fox turns about its ground point and lifts
-            ob.rotation_euler = (0.0, 0.0, self.cur["turn"])
+            ob.rotation_euler = (0.0, 0.0, self.base_turn + self.cur["turn"])
             ob.location = (0.0, 0.0, self.cur["lift"])
 
     @staticmethod
@@ -1604,6 +1614,12 @@ def stage(sc, view, zoom=None):
     return cam
 
 
+def left_head_fix(pose):
+    """the head's turn toward the camera, mirrored for the fox facing left: the same rotation the turn clip ends on"""
+    hp, hy, hr = pose.get("head_rot", (0, 0, 0))
+    return _rot((0, 0, 1), math.radians(-2 * hy)) @ _rot((1, 0, 0), math.radians(-2 * hr))
+
+
 def render_anim(P, pose, view, out, size, nfr, traits, motion="idle"):
     """a seamless loop of nfr frames at game size. idle: breathing, head sway, an ear flick, a blink, tails swaying, foxfire
     bobbing. walk: a walk cycle in place (WalkRig). Also writes anchor.json: where the fox's ground origin lands in the frame,
@@ -1613,8 +1629,16 @@ def render_anim(P, pose, view, out, size, nfr, traits, motion="idle"):
     sc.render.resolution_x, sc.render.resolution_y = size, int(round(size * 0.913))
     fox = Fox3D(P, pose, traits or {})
     rig = WalkRig(fox) if motion == "walk" else FoxRig(fox) if motion == "idle" else ReactRig(fox, motion)
+    whole = [o for o in bpy.data.objects if o.type in ("MESH", "CURVES", "CURVE") and not o.name.startswith("ground")]
+    base_turn = 0.0
+    if FACE_LEFT and motion != "turn":                  # the turn clip runs between the two sides itself
+        base_turn = -math.radians(TURN_DEG)
+        if os.environ.get("FOX_HEADFIX", "1") != "0":
+            rig.head_fix = left_head_fix(fox.pose)
+        if isinstance(rig, ReactRig):
+            rig.base_turn = base_turn
     cam = stage(sc, view)
-    d = os.path.join(out, f"{pose}-{view}-{motion}")
+    d = os.path.join(out, f"{pose}-{view}-{motion}{'-left' if FACE_LEFT else ''}")
     os.makedirs(d, exist_ok=True)
     import json
     bpy.context.view_layer.update()                    # so the camera's placement is applied before projecting
@@ -1625,6 +1649,9 @@ def render_anim(P, pose, view, out, size, nfr, traits, motion="idle"):
     frames = [int(x) for x in only.split(",")] if only else range(nfr)
     for f in frames:
         rig.frame(f, nfr)
+        if not isinstance(rig, ReactRig):
+            for ob in whole:
+                ob.rotation_euler = (0.0, 0.0, base_turn)
         sc.render.filepath = os.path.join(d, f"frame_{f:02d}.png")
         bpy.ops.render.render(write_still=True)
         print("rendered", sc.render.filepath)
@@ -1685,7 +1712,7 @@ if __name__ == "__main__":
         for job in react:
             parts = job.split(":")
             motion, pose, view = parts[0], parts[1], parts[2]
-            nfr = int(parts[3]) if len(parts) > 3 else dict(eat=16, happy=16, hunger=24, doze=14, sleep=24, turn=8)[motion]
+            nfr = int(parts[3]) if len(parts) > 3 else dict(eat=16, happy=16, hunger=24, doze=14, sleep=24, turn=13)[motion]
             render_anim(EMBER, pose, view, out, size, nfr, traits, motion)
         sys.exit(0)
     if walk:
