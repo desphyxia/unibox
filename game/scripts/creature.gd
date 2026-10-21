@@ -9,6 +9,7 @@ extends Touchable
 signal petted
 signal ate
 signal clip_finished
+signal arrived                         ## a walk ended (dragged, called or wandering)
 
 ## Points on the sitting fox, in render pixels of the 640-wide frames (facing right). The creature's origin is the
 ## anchor from anim.json: the same ground point in every animation, so the clips line up.
@@ -23,6 +24,11 @@ const LOOPS := ["idle", "walk", "sleep"]
 
 var temperament := "playful"
 var base_scale := 0.5
+var traits := Traits.DEFAULT.duplicate()  ## coat and glow colours, drawn by recolouring the frames
+var voice := 1.0                       ## pitch of its sounds: babies squeak higher
+var shows_needs := true                ## variant A's hunger cue: only the child's first creature shows it
+var follow: Creature = null            ## a baby potters about near this parent
+var home = null                        ## Vector2: stays near here when it wanders (the second adult by the nest)
 var meadow: Node2D                     ## main.gd: effects layer, the tree, island time, food on the ground
 
 var body := Node2D.new()               ## lift and tilt, pivot at the feet
@@ -86,6 +92,17 @@ func setup(frames: SpriteFrames, infos: Dictionary, temper: String, world_scale:
 	_play("idle")
 	sprite.frame = randi() % frames.get_frame_count("idle")
 	_next_wander = _wander_gap()
+
+
+func set_traits(t: Dictionary) -> void:
+	traits = t.duplicate()
+	var m := Traits.material(traits)
+	sprite.material = m
+	ghost.material = m
+
+
+func _sfx(id: String, pitch := 1.0, vary := 0.06, db := 0.0) -> void:
+	Sfx.play(id, pitch * voice, vary, db)
 
 
 func depth_scale() -> float:
@@ -318,7 +335,7 @@ func walk_to(p: Vector2, speed := 1.0) -> void:
 func call_to(p: Vector2) -> void:
 	## the child tapped the meadow: it looks up, chirps and trots over
 	food_target = null
-	Sfx.play("chirp", 1.1)
+	_sfx("chirp", 1.1)
 	Log.event("creature_walk", "call")
 	if asleep:
 		await wake()
@@ -331,11 +348,11 @@ func pet(p: Vector2) -> void:
 	petted.emit()
 	Fx.hearts(meadow.fx, head_world() + Vector2(0, -30), 1 if busy else 3, 36)
 	if busy:
-		Sfx.play("chirp", 1.2, 0.1, -4.0)
+		_sfx("chirp", 1.2, 0.1, -4.0)
 		return
 	target = null
 	if asleep:
-		Sfx.play("chirp", 0.8, 0.05, -4.0)
+		_sfx("chirp", 0.8, 0.05, -4.0)
 		await wake()
 	busy = true
 	await _settle()
@@ -344,19 +361,19 @@ func pet(p: Vector2) -> void:
 	var fps := 12.0
 	match temperament:
 		"calm":
-			Sfx.play("chirp", 0.82)
+			_sfx("chirp", 0.82)
 			fps = 9.0
 		"curious":
 			if absf(p.x - position.x) > 20:
 				await turn_to(signf(p.x - position.x))
-			Sfx.play("chirp2", 1.15)
+			_sfx("chirp2", 1.15)
 			fps = 12.0
 			var t := create_tween()
 			_react_tween = t
 			t.tween_property(self, "tilt", 0.08 * facing, 0.3).set_trans(Tween.TRANS_SINE)
 			t.tween_property(self, "tilt", 0.0, 0.5).set_trans(Tween.TRANS_SINE)
 		_:  # playful: happy hops while it wiggles
-			Sfx.play("chirp2")
+			_sfx("chirp2")
 			fps = 14.0
 			var t := create_tween()
 			_react_tween = t
@@ -410,7 +427,7 @@ func eat(apple: Node2D, how: String) -> void:
 	t.parallel().tween_property(apple, "scale", apple.scale * 0.7, 0.28)
 	var base_scale_apple: Vector2 = apple.scale * 0.7
 	var bite := func(i: int):
-		Sfx.play("munch", 1.0 + i * 0.05)
+		_sfx("munch", 1.0 + i * 0.05)
 		if is_instance_valid(apple):
 			var tb := create_tween()
 			tb.tween_property(apple, "scale", base_scale_apple * (0.7 - i * 0.25), 0.08)
@@ -424,7 +441,7 @@ func eat(apple: Node2D, how: String) -> void:
 			bite.call(i)
 			await get_tree().create_timer(0.22).timeout
 		gone.call()
-	Sfx.play("happy")
+	_sfx("happy")
 	Fx.sparkles(meadow.fx, position + Vector2(0, -200) * depth_scale(), 10, 120, Color(1, 0.95, 0.75))
 	Fx.hearts(meadow.fx, head_world() + Vector2(0, -30), 2)
 	var th := create_tween()
@@ -447,14 +464,14 @@ func hunger_cue() -> void:
 	if absf(tx - position.x) > 6 and signf(tx - position.x) != facing:
 		await turn_to(signf(tx - position.x))
 	if _has("hunger"):
-		await play_clip("hunger", 12.0, false, {9: func(): Sfx.play("sigh")})
+		await play_clip("hunger", 12.0, false, {9: func(): _sfx("sigh")})
 	else:
-		Sfx.play("sigh")
+		_sfx("sigh")
 		await get_tree().create_timer(1.4).timeout
 	busy = false
 
 
-func appear(from: Vector2) -> void:
+func appear(from: Vector2, hop := Vector2(120, 50)) -> void:
 	## hatched: pops out of the egg, then hops clear of the nest
 	position = from
 	busy = true
@@ -462,11 +479,11 @@ func appear(from: Vector2) -> void:
 	var t := create_tween()
 	t.tween_property(self, "squash_v", Vector2(1.1, 0.92), 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	t.tween_property(self, "squash_v", Vector2.ONE, 0.25)
-	t.tween_callback(func(): Sfx.play("happy"))
+	t.tween_callback(func(): _sfx("happy"))
 	t.tween_interval(0.5)
 	t.tween_callback(func():
 		busy = false
-		walk_to(from + Vector2(120, 50), 0.8))
+		walk_to(from + hop, 0.8))
 
 
 func _play(anim: String, quiet := false) -> void:
@@ -482,6 +499,8 @@ func _play(anim: String, quiet := false) -> void:
 
 
 func _wander_gap() -> float:
+	if follow:
+		return randf_range(2.5, 5.0)
 	match temperament:
 		"calm":
 			return randf_range(10.0, 16.0)
@@ -551,12 +570,16 @@ func _process(delta: float) -> void:
 			_idle_for = 0.0
 			_next_wander = _wander_gap()
 			var p := position + Vector2(randf_range(-220, 220), randf_range(-60, 60))
+			if follow and is_instance_valid(follow):
+				p = follow.position + Vector2(randf_range(-170, 170), randf_range(-30, 50))
+			elif home != null:
+				p = home + Vector2(randf_range(-90, 90), randf_range(-25, 25))
 			walk_to(p, 0.55 if temperament == "calm" else 0.75)
 	# needs: only variant A shows a cue
-	if Game.variant == "A" and not hungry and _age > _hunger_at:
+	if Game.variant == "A" and shows_needs and not hungry and _age > _hunger_at:
 		hungry = true
 		_next_cue = _age
-	if hungry and Game.variant == "A" and calm and _age >= _next_cue:
+	if hungry and Game.variant == "A" and shows_needs and calm and _age >= _next_cue:
 		_next_cue = _age + 22.0
 		hunger_cue()
 
@@ -568,6 +591,7 @@ func _arrive() -> void:
 		if absf(apple.position.x - mouth_world().x) < 90 and absf(apple.position.y - position.y) < 60:
 			eat(apple, "ground")
 			return
+	arrived.emit()
 	var t := create_tween()
 	t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.08)
 	t.tween_property(self, "squash_v", Vector2.ONE, 0.15)

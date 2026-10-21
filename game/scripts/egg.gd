@@ -12,6 +12,7 @@ var sprite := Sprite2D.new()
 var glow := Sprite2D.new()
 var cracks := Node2D.new()
 var taps := 0
+var locked := false                     ## a new egg waits while the child picks its traits
 var _rub := 0.0
 var _last := Vector2.ZERO
 var _last_knock_ms := 0
@@ -21,7 +22,7 @@ var _done := false
 
 
 func _ready() -> void:
-	touch_priority = 10
+	touch_priority = 30                 ## above the creatures: they often sit right by the nest
 	glow.texture = Fx.glow_texture(Color(1.0, 0.93, 0.7, 0.85), 256)
 	glow.position = Vector2(0, -72)
 	add_child(glow)
@@ -35,7 +36,7 @@ func _ready() -> void:
 
 func hit_test(p: Vector2) -> bool:
 	var d := (p - (world_pos() + Vector2(0, -75))) / Vector2(80, 100)
-	return not _done and d.length() <= 1.0
+	return not _done and not locked and d.length() <= 1.0
 
 
 func touch_begin(p: Vector2) -> void:
@@ -106,9 +107,9 @@ func _process(delta: float) -> void:
 	_t += delta
 	_idle += delta
 	var pulse := 0.5 + 0.5 * sin(_t * TAU / 1.6)
-	glow.modulate.a = 0.45 + 0.45 * pulse
+	glow.modulate.a = (0.45 + 0.45 * pulse) * (0.4 if locked else 1.0)
 	glow.scale = Vector2.ONE * (1.25 + 0.12 * pulse) * Vector2(1.0, 1.25)
-	if _idle > 7.0 and not _done:               # nobody has touched it for a while: a small wobble to invite a tap
+	if _idle > 7.0 and not _done and not locked:               # nobody has touched it for a while: a small wobble to invite a tap
 		_idle = 0.0
 		var t := create_tween()
 		for a in [0.06, -0.05, 0.03, 0.0]:

@@ -1,8 +1,9 @@
 extends Node2D
 ## The playable meadow (step 1 of the prototype): an egg in a nest at dawn; tap or rub it to hatch a fox; pet it, walk
 ## it, call it, feed it apples from the tree; a parent can name it through the gate. Island time runs from dawn
-## to dusk in about ten minutes. Follows docs/first-ten-minutes.md up to the pond (later steps add the pond,
-## dressing and the second egg).
+## to dusk in about ten minutes. A few minutes in, a second fox comes to the nest; bring yours over and an egg appears,
+## the child picks the baby's colours from its parents and hatches it (breeding.gd, trait_picker.gd). Follows
+## docs/first-ten-minutes.md, without the pond and dressing so far.
 
 const BASE := Vector2(1024, 768)            ## the area every screen shows; wider or taller screens see more meadow
 const NEST_AT := Vector2(512, 600)
@@ -19,7 +20,11 @@ var tree := Node2D.new()
 var tree_apples := Node2D.new()
 var nest := Node2D.new()
 var egg: Egg
-var creature: Creature
+var creature: Creature                      ## the child's first creature (hatched from the first egg)
+var creatures: Array[Creature] = []         ## every creature in the meadow
+var breeding: Breeding
+var picker: TraitPicker                     ## open while the child chooses a new egg's traits
+var _selected: Creature                     ## the creature touched last: a tap on the meadow calls this one
 var tag: NameTag
 var time: IslandTime
 var ui: ParentUI
@@ -49,7 +54,14 @@ func _ready() -> void:
 	sky = SkyButton.new()
 	sky.time = time
 	sky_layer.add_child(sky)
-	time.switched.connect(func(night: bool): if creature and night: creature.bedtime())
+	time.switched.connect(func(night: bool):
+		if night:
+			for c in creatures:
+				c.bedtime())
+	breeding = Breeding.new()
+	breeding.main = self
+	add_child(breeding)
+	ui.second_fox_requested.connect(func(): breeding.arrive_now())
 	Game.name_changed.connect(func(n): if tag: tag.set_text(n))
 	Game.settings_changed.connect(func(): if creature: creature.temperament = Game.temperament)
 	get_viewport().size_changed.connect(_layout)
@@ -156,12 +168,31 @@ func _new_session() -> void:
 
 
 # ------------------------------------------------------------------ hatching and the creature
+func spawn_creature(traits: Dictionary, size: float, at: Vector2, temper: String, face := 1.0) -> Creature:
+	var c := Creature.new()
+	c.meadow = self
+	c.facing = face
+	c.setup(frames, anim_info, temper, CREATURE_SCALE * size)
+	c.set_traits(traits)
+	c.position = at
+	world.add_child(c)
+	creatures.append(c)
+	return c
+
+
+func open_picker(parents: Array, done: Callable) -> void:
+	picker = TraitPicker.new(parents, frames, anim_info)
+	picker.chosen.connect(func(t, src):
+		picker = null
+		done.call(t, src))
+	add_child(picker)
+
+
 func _on_hatched(at: Vector2) -> void:
-	creature = Creature.new()
-	creature.meadow = self
-	creature.setup(frames, anim_info, Game.temperament, CREATURE_SCALE)
-	world.add_child(creature)
+	creature = spawn_creature(Traits.DEFAULT, 1.0, at + Vector2(0, 24), Game.temperament)
+	_selected = creature
 	creature.appear(at + Vector2(0, 24))
+	breeding.start()
 	tag = NameTag.new()
 	tag.follow = creature
 	overlay.add_child(tag)
@@ -208,10 +239,19 @@ func carry(a: Apple) -> void:
 	a.reparent(overlay)
 
 
+func _nearest(p: Vector2, ok: Callable) -> Creature:
+	var best: Creature = null
+	for c in creatures:
+		if is_instance_valid(c) and ok.call(c) and (best == null or c.position.distance_to(p) < best.position.distance_to(p)):
+			best = c
+	return best
+
+
 func apple_released(a: Apple) -> void:
-	if creature and not creature.busy and creature.wants_food_at(a.position):
+	var eater := _nearest(a.position, func(c): return not c.busy and c.wants_food_at(a.position))
+	if eater:
 		a.state = Apple.State.EATEN
-		creature.eat(a, "hand")
+		eater.eat(a, "hand")
 		return
 	# dropped on the meadow: it falls to the grass and stays there
 	a.reparent(world)
@@ -223,10 +263,10 @@ func apple_released(a: Apple) -> void:
 		var t := oldest.create_tween()
 		t.tween_property(oldest, "modulate:a", 0.0, 0.5)
 		t.tween_callback(oldest.queue_free)
-	if creature and not creature.busy:
-		var landing := Vector2(a.position.x, ground_y)
-		if landing.distance_to(creature.position) < 260.0:
-			get_tree().create_timer(0.5).timeout.connect(func(): if is_instance_valid(a) and a.state == Apple.State.ON_GROUND: creature.fetch(a))
+	var landing := Vector2(a.position.x, ground_y)
+	var fetcher := _nearest(landing, func(c): return not c.busy and c.position.distance_to(landing) < 260.0)
+	if fetcher:
+		get_tree().create_timer(0.5).timeout.connect(func(): if is_instance_valid(a) and a.state == Apple.State.ON_GROUND: fetcher.fetch(a))
 
 
 # ------------------------------------------------------------------ touch routing
@@ -266,6 +306,12 @@ func _unhandled_input(e: InputEvent) -> void:
 		if ui.corner_rect().has_point(e.position):
 			_finger = -1
 			return
+		if picker:                                  ## the trait choice takes every touch while it is open
+			if e.pressed:
+				picker.touch(e.position)
+			_finger = -1
+			_active = null
+			return
 		if e.pressed and _finger == -1 and sky.hit(e.position):
 			sky.tap()                               ## its lift is then ignored: no finger is being followed
 			return
@@ -273,6 +319,8 @@ func _unhandled_input(e: InputEvent) -> void:
 		if e.pressed:
 			_finger = e.index
 			_active = _pick(p)
+			if _active is Creature:
+				_selected = _active
 			_ground_press = null if _active else p
 			if _active:
 				_active.touch_begin(p)
@@ -291,5 +339,6 @@ func _unhandled_input(e: InputEvent) -> void:
 func _ground_tap(p: Vector2) -> void:
 	## a tap on the meadow calls the creature over; before hatching it just makes a little sparkle
 	Fx.sparkles(fx, p, 5, 30, Color(1, 0.97, 0.85))
-	if creature and not creature.busy and p.y > Creature.GROUND.position.y - 60:
-		creature.call_to(p)
+	var c := _selected if is_instance_valid(_selected) else creature
+	if c and not c.busy and p.y > Creature.GROUND.position.y - 60:
+		c.call_to(p)

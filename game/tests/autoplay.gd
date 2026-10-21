@@ -112,6 +112,46 @@ func _ready() -> void:
 	for k in 4:
 		await wait(0.1)
 		await shot("turn-back-%d" % k)
+	await wait(1.5)
+	# the second fox comes to the nest (the parent area's button, instead of waiting four minutes)
+	main.breeding.arrive_now()
+	await wait(2.0)
+	await shot("second-fox-arriving")
+	await until(func(): return main.breeding.state != Breeding.State.ARRIVING, 15.0)
+	await wait(0.5)
+	await shot("second-fox-waiting")
+	# bring ours over: an egg appears and the trait choice opens
+	var pt: Creature = main.breeding.partner
+	if main.breeding.state == Breeding.State.READY:
+		await tap(w(pt.position + Vector2(-190, 8)))
+	await until(func(): return main.breeding.state == Breeding.State.PAIRING, 12.0)
+	await wait(0.9)
+	await shot("pairing")
+	await until(func(): return main.picker != null, 12.0)
+	await wait(0.2)
+	await shot("egg-and-picker-opening")
+	await wait(0.8)
+	await shot("picker")
+	await tap(main.picker.chip_at("coat", 1))
+	await wait(0.5)
+	await shot("picker-coat-from-2")
+	await tap(main.picker.chip_at("glow", 0))
+	await wait(0.5)
+	await shot("picker-glow-from-1")
+	await tap(main.picker.chip_at("glow", 1))
+	await wait(0.4)
+	await tap(main.picker.tick_at())
+	await wait(0.8)
+	await shot("egg-ready")
+	for i in 4:
+		await tap(w(Vector2(512, 545)))
+		await wait(0.35)
+	await wait(0.2)
+	await shot("baby-hatch")
+	await wait(2.5)
+	await shot("baby")
+	await wait(6.0)
+	await shot("family")
 	print("AUTOPLAY DONE log=", ProjectSettings.globalize_path(Log.path))
 	get_tree().quit()
 
@@ -119,6 +159,15 @@ func _ready() -> void:
 func w(p: Vector2) -> Vector2:
 	## meadow coordinates to screen coordinates
 	return main.world.get_global_transform_with_canvas() * p
+
+
+func until(cond: Callable, limit: float) -> void:
+	var t := 0.0
+	while not cond.call() and t < limit:
+		await wait(0.1)
+		t += 0.1
+	if not cond.call():
+		push_error("autoplay: timed out waiting")
 
 
 func wait(s: float) -> void:
@@ -136,7 +185,7 @@ func shot(name: String) -> void:
 func _touch(p: Vector2, pressed: bool) -> void:
 	var e := InputEventScreenTouch.new()
 	e.index = FINGER
-	e.position = p
+	e.position = get_viewport().get_screen_transform() * p      ## the window's pixels (other than the game's at other sizes)
 	e.pressed = pressed
 	Input.parse_input_event(e)
 
@@ -154,7 +203,7 @@ func release(p: Vector2) -> void:
 func drag(p: Vector2) -> void:
 	var e := InputEventScreenDrag.new()
 	e.index = FINGER
-	e.position = p
+	e.position = get_viewport().get_screen_transform() * p
 	Input.parse_input_event(e)
 	await get_tree().process_frame
 	await get_tree().process_frame

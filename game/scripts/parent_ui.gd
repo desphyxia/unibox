@@ -6,6 +6,7 @@ extends CanvasLayer
 
 signal new_session_requested
 signal time_speed_changed(speed: float)
+signal second_fox_requested
 
 const WORDS := ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 const HOLD_SECONDS := 1.2
@@ -238,6 +239,11 @@ func open_panel() -> void:
 			time_speed_changed.emit(_time_speed)
 			open_panel(), is_equal_approx(_time_speed, s[0]))
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var sf := _button(box, "Bring the second fox now (it comes by itself about 4 min after the hatch)", func():
+		_close()
+		Log.event("setting", "second_fox=now")
+		second_fox_requested.emit())
+	sf.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var r4 := _row(box)
 	var ns := _button(r4, "New session (next child)", func():
 		_close()
