@@ -24,6 +24,7 @@ var creature: Creature                      ## the child's first creature (hatch
 var creatures: Array[Creature] = []         ## every creature in the meadow
 var breeding: Breeding
 var picker: TraitPicker                     ## open while the child chooses a new egg's traits
+var compare: CompareView                    ## the rendered and live 3D foxes side by side (from the parent area)
 var _selected: Creature                     ## the creature touched last: a tap on the meadow calls this one
 var tag: NameTag
 var time: IslandTime
@@ -62,6 +63,7 @@ func _ready() -> void:
 	breeding.main = self
 	add_child(breeding)
 	ui.second_fox_requested.connect(func(): breeding.arrive_now())
+	ui.compare_requested.connect(open_compare)
 	Game.name_changed.connect(func(n): if tag: tag.set_text(n))
 	Game.settings_changed.connect(func(): if creature: creature.temperament = Game.temperament)
 	get_viewport().size_changed.connect(_layout)
@@ -180,6 +182,14 @@ func spawn_creature(traits: Dictionary, size: float, at: Vector2, temper: String
 	return c
 
 
+func open_compare() -> void:
+	if compare:
+		return
+	compare = CompareView.new(frames, anim_info)
+	compare.closed.connect(func(): compare = null)
+	add_child(compare)
+
+
 func open_picker(parents: Array, done: Callable) -> void:
 	picker = TraitPicker.new(parents, frames, anim_info)
 	picker.chosen.connect(func(t, src):
@@ -293,7 +303,7 @@ func _pick(p: Vector2) -> Touchable:
 
 
 func _unhandled_input(e: InputEvent) -> void:
-	if ui.blocking:
+	if ui.blocking or compare:
 		_active = null
 		_finger = -1
 		return

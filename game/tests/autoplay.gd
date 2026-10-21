@@ -152,6 +152,27 @@ func _ready() -> void:
 	await shot("baby")
 	await wait(6.0)
 	await shot("family")
+	# the comparison: rendered fox and live 3D fox
+	main.open_compare()
+	await wait(1.5)
+	await shot("compare")
+	main.compare._zoom = 2.0
+	main.compare._layout()
+	await wait(0.6)
+	await shot("compare-close")
+	main.compare._turn = 1.4
+	await wait(0.4)
+	await shot("compare-turned")
+	main.compare._zoom = 1.0
+	main.compare._turn = 0.0
+	main.compare._traits_i = 1
+	main.compare._apply_look()
+	main.compare._layout()
+	await wait(0.4)
+	await shot("compare-colours")
+	print("COMPARE ", main.compare._fps.text)
+	main.compare.close()
+	await wait(0.3)
 	print("AUTOPLAY DONE log=", ProjectSettings.globalize_path(Log.path))
 	get_tree().quit()
 

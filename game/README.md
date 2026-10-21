@@ -32,11 +32,20 @@ Press and hold the dots in the top-right corner, answer the grown-ups question, 
 - temperament;
 - island-time speed (fast for demos);
 - **Bring the second fox now**, instead of waiting about four minutes after the hatch;
+- **Compare: rendered fox and live 3D fox**, a side-by-side check for deciding how creatures are made (see below);
 - **New session** for the next child: a new egg and a new log.
 
 Each session writes a tab-separated event log on the device. In the parent area, **Show event log** displays it with
 a **Copy all** button; this works on the iPad too, where the log sits in the browser's storage. The log holds no
 name and no identifiers.
+
+## The live 3D comparison (`compare/`)
+The parent area's **Compare** button opens the fox two ways over the meadow: on the left the rendered frames the game
+uses now, on the right the same model drawn live in 3D with shell fur (`live_fox.gd`, `fox_live.gdshader`,
+`fox_fur.gdshader`; the model is exported by `art/generators/fox_live_export.py`). Buttons: close-up, turn round (or
+drag the live fox), fur layers 8/16/24, colours (both recolour), back. The corner shows frames per second and how many
+triangles the live fox draws. The live fox only has the idle loop's motions so far (breathing, head, ears, tails,
+foxfire, blinks); walking and the other clips would need a skeleton.
 
 ## Stand-ins
 - Rendered: the sitting idle loop, a walk cycle, eating, a happy wiggle, the hunger look and sigh, lying down to
