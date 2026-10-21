@@ -31,8 +31,8 @@ a **Copy all** button; this works on the iPad too, where the log sits in the bro
 name and no identifiers.
 
 ## Stand-ins
-- Rendered: the sitting idle loop, a walk cycle, eating, a happy wiggle, the hunger look and sigh, dozing off, a
-  sleep loop, and turning round (sitting or standing). The walk plays at the speed that keeps a paw on the ground in
+- Rendered: the sitting idle loop, a walk cycle, eating, a happy wiggle, the hunger look and sigh, lying down to
+  sleep (played backward to wake), a sleep loop, and turning round (sitting or standing). The walk plays at the speed that keeps a paw on the ground in
   step with the meadow. Every animation is rendered facing each way (folders ending `_left`); a turn
   plays a rendered clip that runs from one side's rest pose round to the other's.
 - The meadow art is drawn from code (`art/generators/meadow.py`).

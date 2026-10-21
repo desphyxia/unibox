@@ -108,7 +108,12 @@ func mouth_world() -> Vector2:
 
 
 func top_world() -> Vector2:
-	var curled := 190.0 if asleep and _base() == "sleep" else 0.0      ## curled up asleep, the head is much lower
+	## curled up asleep the head is much lower; while lying down or getting up the tag follows it down or up
+	var curled := 0.0
+	if asleep and _base() == "sleep":
+		curled = 190.0
+	elif _base() == "liedown":
+		curled = 190.0 * smoothstep(0.0, 1.0, float(sprite.frame) / maxf(1.0, sprite.sprite_frames.get_frame_count(sprite.animation) - 1))
 	return position + Vector2(0, (TOP_R + curled - FEET_R.y + _ref.y) * depth_scale() - lift)
 
 
@@ -263,13 +268,21 @@ func _crossfade_to_loop(anim: String) -> void:
 
 
 func fall_asleep() -> void:
-	if asleep or not _has("sleep") or not _has("doze"):
+	## lies down and curls up: one rendered clip from the sitting pose to the sleep loop's first frame. Its fur is grown a
+	## little differently (it is rebuilt every frame), so a short fade covers the change at each end.
+	var clip := "liedown" if _has("liedown") else "doze"
+	if asleep or not _has("sleep") or not _has(clip):
 		return
 	asleep = true
 	busy = true
 	target = null
-	await play_clip("doze", 9.0)
-	_crossfade_to_loop("sleep")
+	_fade_out_current(0.2)
+	await play_clip(clip, 12.0 if clip == "liedown" else 9.0)
+	if clip == "liedown":
+		_fade_out_current(0.2)
+		_play("sleep", true)
+	else:
+		_crossfade_to_loop("sleep")
 	Log.event("creature_sleep", "")
 	busy = false
 
@@ -280,15 +293,17 @@ func bedtime() -> void:
 
 
 func wake() -> void:
-	## from the sleep loop back to sitting: fade to the end of dozing off, then play it backward
+	## from the sleep loop back to sitting: lying down played backward (it uncurls and sits up)
 	if not asleep:
 		return
+	var clip := "liedown" if _has("liedown") else "doze"
 	busy = true
-	_fade_out_current(0.35)
-	await play_clip("doze", 14.0, true)
+	_fade_out_current(0.2 if clip == "liedown" else 0.35)
+	await play_clip(clip, 15.0, true)
 	asleep = false
 	busy = false
 	_stay_awake_until = _age + 25.0
+	_fade_out_current(0.2)
 	_play("idle", true)
 	Log.event("creature_wake", "")
 

@@ -28,6 +28,11 @@ GROUND_Z = 0.42
 # that equals the mirrored view for everything symmetric; the head's own turn toward the camera is mirrored on top.
 FACE_LEFT = os.environ.get("FOX_FACE") == "left"
 TURN_DEG = 100.0                        # from facing right to facing left, seen from the three-quarter camera
+# FOX_STABLE=1 grows the fur so the same strands come back when the fox is rebuilt in a slightly different pose: every
+# section draws from its own fixed random stream with a fixed count, body strands are placed on the body's building
+# blocks (not on the remeshed surface), and tufts are grouped in rest-pose space. Used for clips that rebuild the fox
+# every frame (lie down), so the fur does not shimmer. The fur pattern differs a little from a normal build.
+STABLE = os.environ.get("FOX_STABLE") == "1"
 MUZZLE_TIP = 1.6                                           # head-local x of the nose tip
 NEAR = -1                                                   # the camera side in the side and three-quarter views
 X, Y, Z = Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
@@ -217,6 +222,21 @@ def pose_data(name):
             eye="open", ribbon=True,
             fire=[(2.35, -0.6, 0.95, 0.22), (-0.3, -0.9, 4.7, 0.26), (-3.4, 0.9, 4.6, 0.2)],
         )
+    if name == "down":                                          # lying like a sphinx: chest low, forelegs out in front, head up
+        sit = pose_data("sit")
+        return dict(
+            spine=[(-0.95, 0, 1.08, 0.62, 0.62), (-0.45, 0, 1.16, 0.74, 0.68), (0.08, 0, 1.2, 0.74, 0.68), (0.5, 0, 1.3, 0.64, 0.62), (0.78, 0, 1.6, 0.52, 0.52)],
+            head=(1.05, 0.0, 2.7), head_rot=(-2, -13, 7), hs=1.0,
+            fore={-1: [(0.72, -0.38, 1.05, 0.26), (1.05, -0.42, 0.62, 0.21), (1.5, -0.44, g + 0.14, 0.18), (1.85, -0.45, g + 0.13, 0.17)],
+                  1: [(0.7, 0.38, 1.05, 0.26), (1.02, 0.42, 0.62, 0.21), (1.45, 0.44, g + 0.14, 0.18), (1.78, 0.45, g + 0.13, 0.17)]},
+            haunch={-1: ((-0.5, -0.55, 1.0), (0.66, 0.42, 0.56)), 1: ((-0.52, 0.55, 1.0), (0.64, 0.4, 0.54))},
+            hind={-1: [(-0.35, -0.72, 0.72, 0.2), (0.0, -0.86, g + 0.15, 0.17), (0.32, -0.9, g + 0.13, 0.16)],
+                  1: [(-0.37, 0.72, 0.72, 0.2), (-0.02, 0.86, g + 0.15, 0.17), (0.3, 0.9, g + 0.13, 0.16)]},
+            tail_root=(-1.25, 0.0, 0.95),
+            tails=sit["tails"],                                 # lie_down_pose blends the tails and foxfire straight from sitting to sleeping
+            eye="open", ribbon=True,
+            fire=sit["fire"],
+        )
     if name == "sleep":                                         # curled up, chin on the big tail
         return dict(
             spine=[(-0.95, 0.15, 1.02, 0.6, 0.6), (-0.45, 0.3, 1.1, 0.74, 0.66), (0.1, 0.25, 1.1, 0.74, 0.66), (0.55, 0.05, 1.05, 0.62, 0.6), (0.82, -0.2, 1.05, 0.5, 0.5)],
@@ -239,6 +259,72 @@ def pose_data(name):
 
 
 # ------------------------------------------------------------------ the creature
+def _ease(x):
+    x = min(1.0, max(0.0, x))
+    return x * x * (3 - 2 * x)
+
+
+def _dense_tail(ctrl):
+    return [tuple(v) for v in resample(catmull([Vector(c) for c in ctrl], 120), 70)]
+
+
+def blend_pose(a, b, t):
+    """a pose part way from a to b: numbers and points are mixed; tails are mixed along their whole length (their control
+    points differ in number); a foxfire only one pose has shrinks away"""
+    def mix_(x, y):
+        if isinstance(x, dict):
+            return {k: mix_(x[k], y[k]) for k in x}
+        if isinstance(x, str):
+            return x if t < 0.5 else y
+        if isinstance(x, bool) or isinstance(y, bool):
+            return float(x) * (1 - t) + float(y) * t
+        if isinstance(x, (int, float)):
+            return x * (1 - t) + y * t
+        return type(x)(mix_(q, r) for q, r in zip(x, y))
+    out = {}
+    for k in a:
+        if k == "tails":
+            out[k] = [([tuple(np.array(q) * (1 - t) + np.array(r) * t) for q, r in zip(_dense_tail(ta[0]), _dense_tail(tb[0]))],
+                       ta[1] * (1 - t) + tb[1] * t, float(ta[2]) * (1 - t) + float(tb[2]) * t) for ta, tb in zip(a[k], b[k])]
+        elif k == "fire":
+            fa, fb = list(a[k]), list(b[k])
+            while len(fa) < len(fb):
+                fa.append(tuple(fb[len(fa)][:3]) + (0.0,))
+            while len(fb) < len(fa):
+                fb.append(tuple(fa[len(fb)][:3]) + (0.0,))
+            out[k] = [tuple(np.array(q) * (1 - t) + np.array(r) * t) for q, r in zip(fa, fb)]
+        else:
+            out[k] = mix_(a[k], b[k])
+    return out
+
+
+def lie_down_pose(u):
+    """sitting (u=0) to curled up asleep (u=1): the chest lowers and the front paws step out into a sphinx, then the body
+    curls round, the tails sweep in and the head comes down onto the big tail"""
+    sit, down, sleep = pose_data("sit"), pose_data("down"), pose_data("sleep")
+    w1 = _ease((u - 0.04) / 0.5)
+    w2 = _ease((u - 0.42) / 0.53)
+    p = blend_pose(blend_pose(sit, down, w1), sleep, w2)
+    wt = _ease((u - 0.28) / 0.64)
+    tf = blend_pose({"tails": sit["tails"], "fire": sit["fire"]}, {"tails": sleep["tails"], "fire": sleep["fire"]}, wt)
+    p["tails"], p["fire"] = tf["tails"], tf["fire"]
+    # the foxfire by the chest would cross the face as the head comes down: it drifts out and forward on the way
+    bump = math.sin(math.pi * wt)
+    fx, fy, fz, fs = p["fire"][1]
+    p["fire"][1] = (fx + 0.8 * bump, fy - 0.7 * bump, fz + 0.2 * bump, fs)
+    # the front paws step out one after the other rather than slide: each lifts while it moves
+    for side, lag in ((-1, 0.0), (1, 0.16)):
+        k = min(1.0, max(0.0, (w1 - lag) / 0.84))
+        up = 0.3 * math.sin(math.pi * k)
+        chain = [list(q) for q in p["fore"][side]]
+        for j, wj in ((2, 0.7), (3, 1.0)):
+            chain[j][2] += up * wj
+        p["fore"][side] = [tuple(q) for q in chain]
+    p["eye"] = "closed" if u >= 0.72 else "open"
+    p["ribbon"] = True
+    return p
+
+
 class Fox3D:
     # the unicorn's tested face decals and flower, shared
     decal_disc = U.Uni3D.decal_disc
@@ -249,7 +335,7 @@ class Fox3D:
 
     def __init__(self, P, pose_name, traits):
         self.P, self.traits, self.pose_name = P, traits, pose_name
-        self.pose = pose_data(pose_name)
+        self.pose = pose_name if isinstance(pose_name, dict) else pose_data(pose_name)
         self.rnd = random.Random(P.get("seed", 11))
         m = lambda n, **kw: material(n, **kw)
         self.mat_coat = m("coat", rough=0.66, sss=0.22, spec=0.22, sheen=0.6)
@@ -353,7 +439,25 @@ class Fox3D:
         return c
 
     def build_body(self):
-        pose = self.pose
+        parts, attach, dense, legs = self.body_parts(self.pose)
+        if STABLE:
+            self.body_parts_now = parts
+            self.body_parts_rest = self.body_parts(pose_data("sit"))[0]
+        self.spine_pts = dense
+        co, faces, nr = fuse(parts, attach)
+        self.legs = legs
+        cols = []
+        for p, n in zip(co.tolist(), nr.tolist()):
+            cols.append(lin(self.coat_at(Vector(p), Vector(n), legs)))
+        verts = [Vector(p) for p in co.tolist()]
+        self.body = add_object("body", verts, faces, cols, self.mat_coat)
+        self.body_co, self.body_nr = co, nr
+        self.body_cols = np.array(cols, dtype=np.float64)[:, :3]
+        self.body_bvh = BVHTree.FromPolygons([tuple(v) for v in verts], faces)
+        print("body fused:", len(verts), "vertices")
+
+    def body_parts(self, pose):
+        """the overlapping primitives the body is fused from; the same list and sizes for every pose"""
         parts, attach = [], []
         sp = [Vector(s[:3]) for s in pose["spine"]]
         rads = [(s[3], s[4]) for s in pose["spine"]]
@@ -368,7 +472,6 @@ class Fox3D:
             up = (Z - tg * Z.dot(tg)).normalized()
             v, f = ellipsoid(c, tg * (max(rl, rv) * 0.75), Y * rl, up * rv, 20, 12)
             parts.append((v, f))
-        self.spine_pts = dense
         legs = []
         for sgn, chain in list(pose["fore"].items()) + list(pose["hind"].items()):
             pts = [Vector(q[:3]) for q in chain]
@@ -387,8 +490,8 @@ class Fox3D:
             end, prev = dl[-1], dl[-3]
             fwd = Vector((end.x - prev.x, end.y - prev.y, 0))
             fwd = X if fwd.length < 0.05 else fwd.normalized()
-            if abs(end.z - GROUND_Z) < 0.4:
-                pc = Vector((end.x, end.y, GROUND_Z + rl[-1] * 0.85)) + fwd * 0.08
+            if abs(end.z - GROUND_Z) < 0.6:                 # a paw on the ground, or lifted mid-step (it rises with the leg)
+                pc = Vector((end.x, end.y, max(GROUND_Z, end.z - 0.13) + rl[-1] * 0.85)) + fwd * 0.08
                 v, f = ellipsoid(pc, fwd * (rl[-1] * 1.45), fwd.cross(Z).normalized() * (rl[-1] * 1.15), Z * (rl[-1] * 0.92), 16, 10)
                 parts.append((v, f))
             else:
@@ -411,16 +514,51 @@ class Fox3D:
             v, f = ellipsoid(c, X * r, Y * r * 1.05, Z * r, 14, 10)
             parts.append((v, f))
         attach.append((tuple(top), 1.0))
-        co, faces, nr = fuse(parts, attach)
-        self.legs = legs
-        cols = []
-        for p, n in zip(co.tolist(), nr.tolist()):
-            cols.append(lin(self.coat_at(Vector(p), Vector(n), legs)))
-        verts = [Vector(p) for p in co.tolist()]
-        self.body = add_object("body", verts, faces, cols, self.mat_coat)
-        self.body_co, self.body_nr = co, nr
-        self.body_bvh = BVHTree.FromPolygons([tuple(v) for v in verts], faces)
-        print("body fused:", len(verts), "vertices")
+        return parts, attach, dense, legs
+
+    def sample_body_stable(self, N):
+        """N fur roots that keep their place on the body from pose to pose: drawn on the building blocks by the sitting
+        pose's areas, carried to this pose's blocks, then onto the fused surface. Returns points, normals, colours, rest
+        positions (for tufts) and how exposed each point is (0 where it is buried inside the body)."""
+        def tris_of(parts):
+            V, T = [], []
+            base = 0
+            for v, f in parts:
+                V.extend([tuple(q) for q in v])
+                for fc in f:
+                    for k in range(1, len(fc) - 1):
+                        T.append((fc[0] + base, fc[k] + base, fc[k + 1] + base))
+                base += len(v)
+            return np.array(V, np.float64), np.array(T, np.int64)
+        Vr, T = tris_of(self.body_parts_rest)
+        Vn, T2 = tris_of(self.body_parts_now)
+        assert len(Vr) == len(Vn) and len(T) == len(T2), "body blocks differ between poses"
+        a, b, c = Vr[T[:, 0]], Vr[T[:, 1]], Vr[T[:, 2]]
+        area = 0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1)
+        rng = np.random.default_rng((self.P.get("seed", 11), 501))
+        pick = rng.choice(len(T), N, p=area / area.sum())
+        u, v = rng.random(N), rng.random(N)
+        flip = u + v > 1
+        u[flip], v[flip] = 1 - u[flip], 1 - v[flip]
+        w = 1 - u - v
+        TT = T[pick]
+        bary = lambda A: A[TT[:, 0]] * w[:, None] + A[TT[:, 1]] * u[:, None] + A[TT[:, 2]] * v[:, None]
+        rest, now = bary(Vr), bary(Vn)
+        from mathutils import kdtree
+        kd = kdtree.KDTree(len(self.body_co))
+        for i, q in enumerate(self.body_co.tolist()):
+            kd.insert(q, i)
+        kd.balance()
+        P = np.empty((N, 3)); idx = np.empty(N, np.int64); dist = np.empty(N)
+        for i, q in enumerate(now.tolist()):
+            loc, nrm, fi, d = self.body_bvh.find_nearest(q)
+            P[i] = loc
+            dist[i] = d
+            idx[i] = kd.find(loc)[1]
+        Nn = self.body_nr[idx].astype(np.float64)
+        Cc = self.body_cols[idx]
+        exposed = ss(0.07, 0.025, dist)
+        return P, Nn, Cc, rest, exposed
 
     # ---------------------------------------------------------- head
     @staticmethod
@@ -677,7 +815,8 @@ class Fox3D:
 
     # ---------------------------------------------------------- fur clumps
     # ---------------------------------------------------------- fur: real strands, combed by code
-    def strands(self, key, roots, nrm, comb, L, lift, clump, cell, c_root, c_tip, droop=0.0, K=7, rad0=0.0042, jitter=0.14, bind=(0, 0), bind_t=None):
+    def strands(self, key, roots, nrm, comb, L, lift, clump, cell, c_root, c_tip, droop=0.0, K=7, rad0=0.0042, jitter=0.14, bind=(0, 0), bind_t=None,
+                rest=None, keep=None):
         """grow N hair strands from roots. comb: the direction they are brushed along the surface; lift: how far they stand off
         it; clump: how strongly neighbouring strands gather into tufts (cells of size `cell`)"""
         N = len(roots)
@@ -702,7 +841,7 @@ class Fox3D:
         Pp = curve(roots, nrm, comb, L)
         clump = np.broadcast_to(np.asarray(clump, dtype=np.float64), (N,))
         if clump.max() > 0:
-            keys = np.floor(roots / cell).astype(np.int64)
+            keys = np.floor((roots if rest is None else rest) / cell).astype(np.int64)
             _, inv = np.unique(keys, axis=0, return_inverse=True)
             inv = inv.ravel()
             m = inv.max() + 1
@@ -723,6 +862,8 @@ class Fox3D:
         kind = np.full(N, bind[0], np.int8)
         idx = np.full(N, bind[1], np.int8)
         tt = np.zeros(N, np.float32) if bind_t is None else np.asarray(bind_t, np.float32)
+        if keep is not None:                                # dropped only now, so every random draw above stays in step
+            Pp, R, C, kind, idx, tt = Pp[keep], R[keep], C[keep], kind[keep], idx[keep], tt[keep]
         self.fur_blocks.setdefault((key, K), []).append((Pp.astype(np.float32), R.astype(np.float32), C.astype(np.float32), kind, idx, tt))
 
     def flush_fur(self):
@@ -818,11 +959,19 @@ class Fox3D:
         lighten = lambda c, k: c + (1 - c) * k
         dens = self.fur_density
         # ---- body: plush short fur, a long cream bib, a collar of fluff round the neck
-        p, n, c, area = self.sample(self.body, int(110000 * dens))
+        rest, keep = None, None
+        if STABLE:
+            self.nrng = np.random.default_rng((P.get("seed", 11), 1))
+            p, n, c, rest, exposed = self.sample_body_stable(int(110000 * dens))
+        else:
+            p, n, c, area = self.sample(self.body, int(110000 * dens))
         hx, hy, hz = self.pose["head"]
         hc = np.array([hx, hy, hz])
         far_head = np.linalg.norm(p - hc, axis=1) > 0.95 * self.hs
-        p, n, c = p[far_head], n[far_head], c[far_head]
+        if STABLE:
+            keep = far_head & (exposed > 0.5)
+        else:
+            p, n, c = p[far_head], n[far_head], c[far_head]
         rel = p - hc
         dist = np.linalg.norm(rel, axis=1)
         bib = ss(0.1, 0.55, n[:, 0] * 0.8 - n[:, 2] * 0.5) * ss(-0.75, -1.15, rel[:, 2]) * ss(-2.4, -1.6, rel[:, 2]) * ss(0.8, 0.35, np.abs(p[:, 1]))
@@ -835,8 +984,11 @@ class Fox3D:
         comb = comb * (1 - bib[:, None]) + np.array([0.35, 0.0, -1.0]) * bib[:, None]
         comb[:, 1] += n[:, 1] * 0.5
         c = c * (1 - bib[:, None]) + cream * bib[:, None]
-        self.strands("fur", p, n, comb, L, 0.18 + 0.25 * bib + 0.2 * nape, 0.25 + 0.55 * bib + 0.35 * nape, 0.11, lighten(c, 0.1), lighten(c, 0.3 + 0.4 * bib[:, None]), droop=0.15 * bib)
+        self.strands("fur", p, n, comb, L, 0.18 + 0.25 * bib + 0.2 * nape, 0.25 + 0.55 * bib + 0.35 * nape, 0.11, lighten(c, 0.1), lighten(c, 0.3 + 0.4 * bib[:, None]), droop=0.15 * bib,
+                     rest=rest, keep=keep)
         # ---- head: very short on the face, long tufted cheek ruffs, a little crown tuft; none on the eyes, nose, mouth or mark
+        if STABLE:
+            self.nrng = np.random.default_rng((P.get("seed", 11), 2))
         p, n, c, area = self.sample(self.head, int(70000 * dens))
         lp = self.head_local(p)
         keep = np.ones(len(p), bool)
@@ -859,11 +1011,14 @@ class Fox3D:
         cc = c * (1 - cheek[:, None] * 0.7) + cream * cheek[:, None] * 0.7
         cc = lighten(cc, 0.08)
         self.strands("fur", p, n, comb, L, 0.05 + 0.45 * cheek + 0.5 * crown, 0.1 + 0.75 * cheek + 0.6 * crown, 0.08, cc, lighten(cc, 0.04 + 0.4 * cheek[:, None]),
-                     droop=0.1 * cheek, rad0=0.0032, bind=(1, 0))
+                     droop=0.1 * cheek, rad0=0.0032, bind=(1, 0), rest=lp * self.hs if STABLE else None)
         # ---- ears: short fur on the back combed toward the tip, long cream tufts spilling out of the cup
+        if STABLE:
+            self.nrng = np.random.default_rng((P.get("seed", 11), 3))
         for ei, ob in enumerate([o for o in self.head_objs if o.name.startswith("ear")]):
             p, n, c, area = self.sample(ob, int(9000 * dens))
-            self.strands("fur", p, n, self.ear_axis_world(p), 0.035, 0.1, 0.1, 0.05, c, lighten(c, 0.1), rad0=0.0032, bind=(2, ei))
+            self.strands("fur", p, n, self.ear_axis_world(p), 0.035, 0.1, 0.1, 0.05, c, lighten(c, 0.1), rad0=0.0032, bind=(2, ei),
+                         rest=self.head_local(p) * self.hs if STABLE else None)
         cvec, Rm = self.head_matrix()
         for ei, (sgn, (b, t, axis, facing, across, Lr, w)) in enumerate(self.ear_tips.items()):
             N = int(700 * dens)
@@ -875,9 +1030,12 @@ class Fox3D:
             nn = np.tile(self.head_dirs(np.array(facing)[None, :]), (N, 1))
             dd = self.head_dirs(np.array(axis)[None, :] * 0.9 + np.array(facing)[None, :] * 0.2) + self.head_dirs(np.array(across)[None, :]) * a[:, None] * 0.45
             Lx = (0.12 + 0.14 * (1 - u)) * self.hs
-            self.strands("fur", roots, nn, dd, Lx, 0.15, 0.75, 0.06, np.tile(lighten(np.array(srgb(P["ear_in"])), 0.3), (N, 1)), np.tile(lighten(cream, 0.5), (N, 1)), rad0=0.003, bind=(2, ei))
+            self.strands("fur", roots, nn, dd, Lx, 0.15, 0.75, 0.06, np.tile(lighten(np.array(srgb(P["ear_in"])), 0.3), (N, 1)), np.tile(lighten(cream, 0.5), (N, 1)), rad0=0.003, bind=(2, ei),
+                         rest=loc * self.hs if STABLE else None)
         # ---- tails
         for ti, (cl, radii, rad, R, ground) in enumerate(self.tail_cores):
+            if STABLE:
+                self.nrng = np.random.default_rng((P.get("seed", 11), 10 + ti))
             self.tail_fur(cl, radii, rad, R, ground, ti)
 
     def ear_axis_world(self, p):
@@ -899,23 +1057,48 @@ class Fox3D:
         n = len(cla)
         seglen = np.linalg.norm(np.diff(cla, axis=0), axis=1)
         length = seglen.sum()
-        N = int(52000 * self.fur_density * length / 3.0 * (R / 0.5) ** 1.5)
         rr = np.array(radii)
-        wts = (rr[:-1] + rr[1:]) * seglen
-        seg = rng.choice(n - 1, N, p=wts / wts.sum())
-        f = rng.random(N)
+        if STABLE:
+            # the same strands whatever the tail's shape: a count from the sitting pose's tail, places along the tail by its
+            # thickness profile only, and a frame carried smoothly down the tail (no flips where it turns upright)
+            N = int(52000 * self.fur_density * self.rest_tail_len[ti] / 3.0 * (self.rest_tail_R[ti] / 0.5) ** 1.5)
+            prof = np.array([rad((i + 0.5) / (n - 1)) for i in range(n - 1)])
+            seg = rng.choice(n - 1, N, p=prof / prof.sum())
+            f = rng.random(N)
+            a = rng.uniform(0, 2 * np.pi, N)
+            T = np.diff(cla, axis=0)
+            T /= np.linalg.norm(T, axis=1, keepdims=True)
+            U = np.zeros_like(T)
+            u0 = np.cross(T[0], [0, 0, 1.0])
+            U[0] = u0 / max(np.linalg.norm(u0), 1e-9)
+            for i in range(1, len(T)):
+                q = U[i - 1] - T[i] * (U[i - 1] @ T[i])
+                U[i] = q / max(np.linalg.norm(q), 1e-9)
+            tg, u = T[seg], U[seg]
+            w = np.cross(tg, u)
+        else:
+            N = int(52000 * self.fur_density * length / 3.0 * (R / 0.5) ** 1.5)
+            wts = (rr[:-1] + rr[1:]) * seglen
+            seg = rng.choice(n - 1, N, p=wts / wts.sum())
+            f = rng.random(N)
+            tg = cla[seg + 1] - cla[seg]
+            tg /= np.linalg.norm(tg, axis=1, keepdims=True)
+            ref = np.where(np.abs(tg[:, 2:3]) < 0.9, np.array([[0, 0, 1.0]]), np.array([[1.0, 0, 0]]))
+            u = np.cross(tg, ref)
+            u /= np.linalg.norm(u, axis=1, keepdims=True)
+            w = np.cross(tg, u)
+            a = rng.uniform(0, 2 * np.pi, N)
         t = (seg + f) / (n - 1)
         cen = cla[seg] * (1 - f)[:, None] + cla[seg + 1] * f[:, None]
-        tg = cla[seg + 1] - cla[seg]
-        tg /= np.linalg.norm(tg, axis=1, keepdims=True)
-        ref = np.where(np.abs(tg[:, 2:3]) < 0.9, np.array([[0, 0, 1.0]]), np.array([[1.0, 0, 0]]))
-        u = np.cross(tg, ref)
-        u /= np.linalg.norm(u, axis=1, keepdims=True)
-        w = np.cross(tg, u)
-        a = rng.uniform(0, 2 * np.pi, N)
         radial = u * np.cos(a)[:, None] + w * np.sin(a)[:, None]
-        keep = ~(radial[:, 2] < -0.45) if ground else np.ones(N, bool)
-        t, cen, tg, radial, seg = t[keep], cen[keep], tg[keep], radial[keep], seg[keep]
+        g = float(ground)
+        if STABLE:                                          # lying on the ground hides the underside: dropped after the draws
+            keep = (1.0 - g * ss(-0.4, -0.5, radial[:, 2])) > 0.5
+            rest = np.stack([t * 3.0 + 10.0 * ti, np.cos(a) * 0.4, np.sin(a) * 0.4], 1)
+        else:
+            keep = ~(radial[:, 2] < -0.45) if ground else np.ones(N, bool)
+            t, cen, tg, radial, seg = t[keep], cen[keep], tg[keep], radial[keep], seg[keep]
+            rest, keep = None, None
         roots = cen + radial * rr[seg][:, None] * 0.97
         grid = np.linspace(0, 1, 50)
         rt = np.interp(t, grid, np.array([rad(q) for q in grid]))
@@ -941,7 +1124,7 @@ class Fox3D:
         glowing = t > 0.84
         for sel, key in ((~glowing, "fur"), (glowing, "glow")):
             self.strands(key, roots[sel], radial[sel], comb[sel], L[sel], 0.2, clump[sel], 0.15, c0[sel], c1[sel], droop=0.05, K=9, rad0=0.0045, jitter=0.12,
-                         bind=(3, ti), bind_t=t[sel])
+                         bind=(3, ti), bind_t=t[sel], rest=None if rest is None else rest[sel], keep=None if keep is None else keep[sel])
 
     def build_tails(self):
         P, rnd = self.P, self.rnd
@@ -949,6 +1132,14 @@ class Fox3D:
         glow = srgb(P["tip_glow"])
         tails = self.pose["tails"]
         order = [0, 1, 2, 1, 1, 1, 1, 1, 1][: self.n_tails]
+        if STABLE:                                              # the sitting tails' lengths and widths fix the strand counts
+            rt = pose_data("sit")["tails"]
+            self.rest_tail_len, self.rest_tail_R = [], []
+            for ti in range(self.n_tails):
+                ctrl, R0, _ = rt[order[ti]] if ti < 3 else rt[1]
+                c0 = resample(catmull([Vector(c) for c in ctrl], 120), 70)
+                self.rest_tail_len.append(sum((b - a).length for a, b in zip(c0, c0[1:])))
+                self.rest_tail_R.append(R0 if ti < 3 else R0 * 0.85)
         self.tail_tips = []
         self.tail_cores = []
         self.tail_objs = []
@@ -969,10 +1160,11 @@ class Fox3D:
 
             def rad(t):
                 return R * (0.32 + 0.68 * math.sin(min(1.0, t / 0.55) * math.pi / 2) ** 1.3) * (1 - smooth(0.62, 1.0, t) ** 1.4 * 0.92)
-            if ground:                                           # a tail lying on the ground rests on it
-                cl = [Vector((p.x, p.y, max(p.z, GROUND_Z + rad(i / (n - 1)) * 0.78))) for i, p in enumerate(cl)]
+            g = float(ground)                                    # a tail lying on the ground rests on it (0..1 while lying down)
+            if g > 0:
+                cl = [Vector((p.x, p.y, p.z + g * max(0.0, GROUND_Z + rad(i / (n - 1)) * 0.78 - p.z))) for i, p in enumerate(cl)]
             radii = [rad(i / (n - 1)) * 0.62 for i in range(n)]
-            rings = tube(cl, radii, flat=0.9 if not ground else 0.78, segs=18, up=Z)
+            rings = tube(cl, radii, flat=0.9 - 0.12 * g, segs=18, up=Z)
             v, f = loft(rings)
             cols = []
             for i in range(n):
@@ -1113,6 +1305,8 @@ class Fox3D:
 
     def build_fire(self):
         for k, (x, y, z, s) in enumerate(self.pose["fire"]):
+            if s < 0.04:                                        # fading out while the pose changes
+                continue
             lean = Vector((0.5 if k % 2 else -0.6, 0, 0)) + Vector((0, 0.2, 0))
             b0 = set(bpy.data.objects)
             self.flame(Vector((x, y, z)), s, lean)
@@ -1468,7 +1662,7 @@ class ReactRig(FoxRig):
         self.base_turn = 0.0
 
     def clip_u(self, f, nfr):
-        if self.motion in ("turn", "doze"):
+        if self.motion in ("turn", "doze", "liedown"):
             return f / (nfr - 1)                           # ends on its last frame
             return f / (nfr - 1)                           # ends on its last frame
         return f / nfr
@@ -1499,6 +1693,11 @@ class ReactRig(FoxRig):
             p.update(pitch=d(24) * s ** 1.3 + nod, ear=d(-12) * s, closed=u > 0.55, sway=1.0 - 0.7 * s)
         elif m == "sleep":
             p.update(sway=0.3, breath=0.02 * math.sin(2 * math.pi * u))
+        elif m == "liedown":
+            # the pose itself is rebuilt each frame (lie_down_pose); here: heavy eyes first, ears drooping on the way down,
+            # the idle sway settling to the sleep loop's, the eyes closing
+            p.update(pitch=d(7) * _win(u, 0.0, 0.12, 0.24, 0.4), ear=d(-10) * _win(u, 0.1, 0.4, 0.72, 1.0),
+                     sway=1.0 - 0.7 * _ss1(0.0, 1.0, u), closed=u >= 0.62)
         elif m == "turn":
             # the whole turn, from facing right to facing left (FACE_LEFT: the other way). It eases in and out, so the middle,
             # facing the camera, is the fastest part. The head leads and the tails trail; the head's own turn toward the camera
@@ -1624,6 +1823,8 @@ def render_anim(P, pose, view, out, size, nfr, traits, motion="idle"):
     """a seamless loop of nfr frames at game size. idle: breathing, head sway, an ear flick, a blink, tails swaying, foxfire
     bobbing. walk: a walk cycle in place (WalkRig). Also writes anchor.json: where the fox's ground origin lands in the frame,
     the same for every pose and motion seen from one view, so the game can swap animations without the fox jumping."""
+    if motion == "liedown":
+        return render_rebuilt(P, pose, view, out, size, nfr, traits, motion, lie_down_pose)
     sc = K.setup_scene(False)
     sc.cycles.samples = int(os.environ.get("FOX_SAMPLES", "64"))
     sc.render.resolution_x, sc.render.resolution_y = size, int(round(size * 0.913))
@@ -1652,6 +1853,39 @@ def render_anim(P, pose, view, out, size, nfr, traits, motion="idle"):
         if not isinstance(rig, ReactRig):
             for ob in whole:
                 ob.rotation_euler = (0.0, 0.0, base_turn)
+        sc.render.filepath = os.path.join(d, f"frame_{f:02d}.png")
+        bpy.ops.render.render(write_still=True)
+        print("rendered", sc.render.filepath)
+
+
+def render_rebuilt(P, pose, view, out, size, nfr, traits, motion, pose_at):
+    """a clip whose pose changes too much to deform one model (lying down): the fox is rebuilt for every frame from
+    pose_at(u), with stable fur so the strands stay put, then ReactRig adds the clip's own curves"""
+    global STABLE
+    STABLE = os.environ.get("FOX_STABLE", "1") != "0"          # FOX_STABLE=0 only to compare against the normal fur
+    import json
+    d = os.path.join(out, f"{pose}-{view}-{motion}{'-left' if FACE_LEFT else ''}")
+    os.makedirs(d, exist_ok=True)
+    only = os.environ.get("FOX_FRAMES")
+    frames = [int(x) for x in only.split(",")] if only else range(nfr)
+    for f in frames:
+        u = f / (nfr - 1)
+        sc = K.setup_scene(False)
+        sc.cycles.samples = int(os.environ.get("FOX_SAMPLES", "64"))
+        sc.render.resolution_x, sc.render.resolution_y = size, int(round(size * 0.913))
+        fox = Fox3D(P, pose_at(u), traits or {})
+        rig = ReactRig(fox, motion)
+        if FACE_LEFT:
+            rig.base_turn = -math.radians(TURN_DEG)
+            if os.environ.get("FOX_HEADFIX", "1") != "0":
+                rig.head_fix = left_head_fix(fox.pose)
+        cam = stage(sc, view)
+        bpy.context.view_layer.update()
+        if not os.path.exists(os.path.join(d, "anchor.json")):
+            ax, ay = anchor_px(sc, cam, (0.0, 0.0, GROUND_Z))
+            json.dump(dict(anchor=[ax, ay], size=[sc.render.resolution_x, sc.render.resolution_y], frames=nfr, motion=motion,
+                           stride_px=0.0), open(os.path.join(d, "anchor.json"), "w"))
+        rig.frame(f, nfr)
         sc.render.filepath = os.path.join(d, f"frame_{f:02d}.png")
         bpy.ops.render.render(write_still=True)
         print("rendered", sc.render.filepath)
@@ -1712,7 +1946,7 @@ if __name__ == "__main__":
         for job in react:
             parts = job.split(":")
             motion, pose, view = parts[0], parts[1], parts[2]
-            nfr = int(parts[3]) if len(parts) > 3 else dict(eat=16, happy=16, hunger=24, doze=14, sleep=24, turn=13)[motion]
+            nfr = int(parts[3]) if len(parts) > 3 else dict(eat=16, happy=16, hunger=24, doze=14, sleep=24, turn=13, liedown=20)[motion]
             render_anim(EMBER, pose, view, out, size, nfr, traits, motion)
         sys.exit(0)
     if walk:

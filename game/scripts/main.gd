@@ -35,7 +35,7 @@ var _finger := -1                           ## the touch being followed; Safari 
 func _ready() -> void:
 	randomize()
 	var names := []
-	for anim in ["idle", "walk", "sleep", "eat", "happy", "hunger", "doze", "turn_sit", "turn_stand"]:
+	for anim in ["idle", "walk", "sleep", "eat", "happy", "hunger", "liedown", "doze", "turn_sit", "turn_stand"]:
 		names.append_array([anim, anim + "_left"])       ## each also rendered facing left (the turns: from the left)
 	frames = _load_frames("res://art/creatures/%s" % Game.kind, names)
 	_build_world()
