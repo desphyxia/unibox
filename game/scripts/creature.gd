@@ -1,29 +1,33 @@
 class_name Creature
 extends Touchable
-## A creature in the meadow. The rendered idle loop plays all the time; walking, petting reactions and eating are
-## stand-in motions (hops, squashes, tilts) until those animations are rendered.
+## A creature in the meadow, played from rendered animations: an idle loop when sitting, a walk cycle when moving, and
+## one-shot clips for eating, being petted (happy), the hunger cue, dozing off, sleeping and turning round.
 ## Touch: tap to pet, drag to walk it somewhere. main.gd also calls it to a tapped spot and hands it food.
 
 signal petted
 signal ate
+signal clip_finished
 
 ## Points on the sitting fox, in render pixels of the 640-wide frames (facing right). The creature's origin is the
-## anchor from anim.json: the same ground point in every animation, so idle and walk line up.
+## anchor from anim.json: the same ground point in every animation, so the clips line up.
 const FEET_R := Vector2(297, 517)
 const MOUTH_R := Vector2(437, 222)
+const EAT_DROP := Vector2(-4, 44)          ## how far the mouth moves when the head dips to eat, render pixels
 const HEAD_R := Vector2(387, 196)
 const TOP_R := 61.0
 const WALK_SPEED := 120.0
 const GROUND := Rect2(120, 525, 784, 205)  ## where it may walk (world), inside the always-visible area
+const LOOPS := ["idle", "walk", "sleep"]
 
 var temperament := "playful"
 var base_scale := 0.5
-var meadow: Node2D                     ## main.gd: effects layer, the tree, food on the ground
+var meadow: Node2D                     ## main.gd: effects layer, the tree, island time, food on the ground
 
 var body := Node2D.new()               ## lift and tilt, pivot at the feet
 var squash := Node2D.new()             ## squash and stretch, times the depth scale
 var flip := Node2D.new()               ## faces left or right
 var sprite := AnimatedSprite2D.new()
+var ghost := Sprite2D.new()            ## the previous frame, fading out: hides the mirror swap mid-turn and the change into sleep
 var shadow := Sprite2D.new()
 
 var lift := 0.0                        ## animated by tweens
@@ -36,7 +40,10 @@ var _ref := Vector2.ZERO               ## from the anchor to the sitting fox's f
 var target = null                      ## Vector2 to walk to, or null
 var speed_factor := 1.0
 var busy := false                      ## reacting or eating: stands still
+var turning := false
+var asleep := false
 var food_target: Node2D = null         ## an apple on the ground it is walking to
+var _clip := {}                        ## the one-shot clip playing: anim, seq (frame numbers), i, t, fps, events, flip_at
 var _hop := 0.0
 var _walk_amount := 0.0
 var _idle_for := 0.0
@@ -46,6 +53,8 @@ var _press_ms := 0
 var _dragging := false
 var _drag_offset := Vector2.ZERO
 var _react_tween: Tween
+var _still_for := 0.0
+var _stay_awake_until := 0.0
 
 # needs (variant A shows a hunger cue; variant B never does, food is simply there to offer)
 var hungry := false
@@ -65,6 +74,9 @@ func setup(frames: SpriteFrames, infos: Dictionary, temper: String, world_scale:
 	body.add_child(squash)
 	squash.add_child(flip)
 	flip.add_child(sprite)
+	squash.add_child(ghost)
+	ghost.centered = false
+	ghost.visible = false
 	sprite.sprite_frames = frames
 	sprite.centered = false
 	var idle: Dictionary = anims["idle"]
@@ -79,26 +91,31 @@ func depth_scale() -> float:
 	return base_scale * lerpf(0.86, 1.12, clampf(inverse_lerp(GROUND.position.y, GROUND.end.y, position.y), 0.0, 1.0))
 
 
+func _at(r: Vector2) -> Vector2:
+	## a point on the sitting fox (render pixels) in the meadow, for the way it faces now
+	var d := r - FEET_R + _ref
+	return position + Vector2(d.x * facing, d.y) * depth_scale() + Vector2(0, -lift)
+
+
 func head_world() -> Vector2:
-	var s := depth_scale()
-	var d := HEAD_R - FEET_R + _ref
-	return position + Vector2(d.x * facing, d.y) * s + Vector2(0, -lift)
+	return _at(HEAD_R)
 
 
 func mouth_world() -> Vector2:
-	var s := depth_scale()
-	var d := MOUTH_R - FEET_R + _ref
-	return position + Vector2(d.x * facing, d.y) * s + Vector2(0, -lift)
+	return _at(MOUTH_R)
 
 
 func top_world() -> Vector2:
-	return position + Vector2(0, (TOP_R - FEET_R.y + _ref.y) * depth_scale() - lift)
+	var curled := 190.0 if asleep and sprite.animation == "sleep" else 0.0      ## curled up asleep, the head is much lower
+	return position + Vector2(0, (TOP_R + curled - FEET_R.y + _ref.y) * depth_scale() - lift)
 
 
 func hit_test(p: Vector2) -> bool:
 	var s := depth_scale()
 	var c := position + Vector2((10 + _ref.x) * facing, -235 + _ref.y) * s
-	var d := (p - c) / (Vector2(165, 250) * s)
+	if asleep:
+		c = position + Vector2((40 + _ref.x) * facing, -110 + _ref.y) * s
+	var d := (p - c) / (Vector2(165, 250 if not asleep else 140) * s)
 	return d.length() <= 1.0
 
 
@@ -111,6 +128,8 @@ func touch_begin(p: Vector2) -> void:
 
 
 func touch_move(p: Vector2) -> void:
+	if asleep or busy:
+		return
 	if not _dragging and p.distance_to(_press_at) > 16:
 		_dragging = true
 		food_target = null
@@ -125,6 +144,132 @@ func touch_end(p: Vector2) -> void:
 	_dragging = false
 
 
+# ------------------------------------------------------------------ clips
+func _has(anim: String) -> bool:
+	return anims.has(anim)
+
+
+func _begin(anim: String, seq: Array, fps: float, events := {}, flip_at := -1) -> void:
+	var info: Dictionary = anims[anim]
+	sprite.stop()
+	sprite.animation = anim
+	sprite.offset = -Vector2(info["anchor"][0], info["anchor"][1])
+	sprite.frame = seq[0]
+	_clip = {"anim": anim, "seq": seq, "i": 0, "t": 0.0, "fps": fps, "events": events, "flip_at": flip_at}
+	if events.has(0):
+		events[0].call()
+
+
+func play_clip(anim: String, fps := 12.0, reverse := false, events := {}) -> void:
+	## plays a one-shot clip and waits for it; events are {frame index: Callable}
+	var seq := range(sprite.sprite_frames.get_frame_count(anim))
+	if reverse:
+		seq.reverse()
+	_begin(anim, seq, fps, events)
+	await clip_finished
+
+
+func _step_clip(delta: float) -> void:
+	_clip["t"] += delta * _clip["fps"]
+	while not _clip.is_empty() and _clip["t"] >= 1.0:
+		_clip["t"] -= 1.0
+		_clip["i"] += 1
+		var seq: Array = _clip["seq"]
+		if _clip["i"] >= seq.size():
+			_clip = {}
+			clip_finished.emit()
+			# nothing chained another clip: back to the right loop
+			if _clip.is_empty() and not LOOPS.has(sprite.animation):
+				_play("sleep" if asleep else ("walk" if target != null and not busy and not turning else "idle"), true)
+			return
+		if _clip["i"] == _clip["flip_at"]:
+			_fade_out_current()
+			facing = -facing
+			flip.scale.x = facing
+		sprite.frame = seq[_clip["i"]]
+		var ev: Dictionary = _clip["events"]
+		if ev.has(_clip["i"]):
+			ev[_clip["i"]].call()
+
+
+func _fade_out_current(time := 0.18) -> void:
+	## leave the frame on screen as it is and fade it away over what comes next
+	ghost.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+	ghost.offset = sprite.offset
+	ghost.scale = Vector2(flip.scale.x, 1)
+	ghost.modulate.a = 1.0
+	ghost.visible = true
+	var t := create_tween()
+	t.tween_property(ghost, "modulate:a", 0.0, time)
+	t.tween_callback(func(): ghost.visible = false)
+
+
+func turn_to(f: float) -> void:
+	## turn round on the spot: the rendered half-turn to face the camera, then the same frames mirrored and backward
+	if f == facing or turning:
+		return
+	var standing := sprite.animation == "walk"
+	var anim := "turn_stand" if standing else "turn_sit"
+	if not _has(anim):
+		facing = f
+		var tw := create_tween()
+		tw.tween_property(flip, "scale:x", facing, 0.16).from(-facing * 0.2)
+		return
+	turning = true
+	var n := sprite.sprite_frames.get_frame_count(anim)
+	var seq := range(n)
+	for k in range(n - 2, -1, -1):
+		seq.append(k)
+	_begin(anim, seq, 24.0 if standing else 18.0, {}, n)
+	await clip_finished
+	turning = false
+
+
+func _settle() -> void:
+	## let a turn already under way finish first
+	while turning:
+		await clip_finished
+
+
+func face_toward(x: float) -> void:
+	if absf(x - position.x) < 6:
+		return
+	var f := signf(x - position.x)
+	if f != facing:
+		turn_to(f)
+
+
+func _crossfade_to_loop(anim: String) -> void:
+	_fade_out_current(0.45)
+	_play(anim, true)
+
+
+func fall_asleep() -> void:
+	if asleep or not _has("sleep") or not _has("doze"):
+		return
+	asleep = true
+	busy = true
+	target = null
+	await play_clip("doze", 9.0)
+	_crossfade_to_loop("sleep")
+	Log.event("creature_sleep", "")
+	busy = false
+
+
+func wake() -> void:
+	## from the sleep loop back to sitting: fade to the end of dozing off, then play it backward
+	if not asleep:
+		return
+	busy = true
+	_fade_out_current(0.35)
+	await play_clip("doze", 14.0, true)
+	asleep = false
+	busy = false
+	_stay_awake_until = _age + 25.0
+	_play("idle", true)
+	Log.event("creature_wake", "")
+
+
 # ------------------------------------------------------------------ actions
 func walk_to(p: Vector2, speed := 1.0) -> void:
 	target = Vector2(clampf(p.x, GROUND.position.x, GROUND.end.x), clampf(p.y, GROUND.position.y, GROUND.end.y))
@@ -135,21 +280,12 @@ func walk_to(p: Vector2, speed := 1.0) -> void:
 func call_to(p: Vector2) -> void:
 	## the child tapped the meadow: it looks up, chirps and trots over
 	food_target = null
-	face_toward(p.x)
 	Sfx.play("chirp", 1.1)
-	walk_to(p, 1.25)
 	Log.event("creature_walk", "call")
-
-
-func face_toward(x: float) -> void:
-	if absf(x - position.x) < 6:
-		return
-	var f := signf(x - position.x)
-	if f == facing:
-		return
-	facing = f
-	var t := create_tween()
-	t.tween_property(flip, "scale:x", facing, 0.16).from(-facing * 0.2)
+	if asleep:
+		await wake()
+	face_toward(p.x)
+	walk_to(p, 1.25)
 
 
 func pet(p: Vector2) -> void:
@@ -160,38 +296,40 @@ func pet(p: Vector2) -> void:
 		Sfx.play("chirp", 1.2, 0.1, -4.0)
 		return
 	target = null
+	if asleep:
+		Sfx.play("chirp", 0.8, 0.05, -4.0)
+		await wake()
 	busy = true
+	await _settle()
 	if _react_tween:
 		_react_tween.kill()
-	var t := create_tween()
-	_react_tween = t
+	var fps := 12.0
 	match temperament:
 		"calm":
 			Sfx.play("chirp", 0.82)
-			t.tween_property(self, "squash_v", Vector2(1.06, 0.93), 0.35).set_trans(Tween.TRANS_SINE)
-			t.parallel().tween_property(self, "tilt", -0.07 * facing, 0.35).set_trans(Tween.TRANS_SINE)
-			t.tween_property(self, "squash_v", Vector2.ONE, 0.5).set_trans(Tween.TRANS_SINE)
-			t.parallel().tween_property(self, "tilt", 0.0, 0.5).set_trans(Tween.TRANS_SINE)
+			fps = 9.0
 		"curious":
-			face_toward(p.x)
+			if absf(p.x - position.x) > 20:
+				await turn_to(signf(p.x - position.x))
 			Sfx.play("chirp2", 1.15)
-			t.tween_property(self, "tilt", 0.16 * facing, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-			t.parallel().tween_property(self, "lift", 10.0, 0.22)
-			t.tween_interval(0.35)
-			t.tween_property(self, "tilt", -0.08 * facing, 0.22).set_trans(Tween.TRANS_SINE)
-			t.tween_property(self, "tilt", 0.0, 0.25).set_trans(Tween.TRANS_SINE)
-			t.parallel().tween_property(self, "lift", 0.0, 0.25)
-			t.tween_callback(func(): Fx.sparkles(meadow.fx, head_world(), 5, 50))
-		_:  # playful: two happy hops
+			fps = 12.0
+			var t := create_tween()
+			_react_tween = t
+			t.tween_property(self, "tilt", 0.08 * facing, 0.3).set_trans(Tween.TRANS_SINE)
+			t.tween_property(self, "tilt", 0.0, 0.5).set_trans(Tween.TRANS_SINE)
+		_:  # playful: happy hops while it wiggles
 			Sfx.play("chirp2")
-			for h in [42.0, 22.0]:
-				t.tween_property(self, "squash_v", Vector2(1.14, 0.86), 0.07)
-				t.tween_property(self, "squash_v", Vector2(0.9, 1.12), 0.08)
-				t.parallel().tween_property(self, "lift", h, 0.17).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+			fps = 14.0
+			var t := create_tween()
+			_react_tween = t
+			for h in [30.0, 16.0]:
+				t.tween_property(self, "lift", h, 0.17).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 				t.tween_property(self, "lift", 0.0, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-				t.parallel().tween_property(self, "squash_v", Vector2(1.1, 0.9), 0.15)
-			t.tween_property(self, "squash_v", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	t.tween_callback(func(): busy = false)
+	if _has("happy"):
+		await play_clip("happy", fps)
+	if temperament == "curious":
+		Fx.sparkles(meadow.fx, head_world(), 5, 50)
+	busy = false
 
 
 func wants_food_at(p: Vector2) -> bool:
@@ -201,6 +339,8 @@ func wants_food_at(p: Vector2) -> bool:
 
 func fetch(apple: Node2D) -> void:
 	## an apple dropped near it: walk over and eat it from the ground
+	if asleep:
+		await wake()
 	food_target = apple
 	face_toward(apple.position.x)
 	walk_to(apple.position + Vector2(-(MOUTH_R.x - FEET_R.x + _ref.x) * depth_scale() * signf(apple.position.x - position.x + 0.01), 6), 1.2)
@@ -210,48 +350,70 @@ func eat(apple: Node2D, how: String) -> void:
 	food_target = null
 	target = null
 	busy = true
+	Log.event("food_given", how)
 	if _react_tween:
 		_react_tween.kill()
-	face_toward(apple.world_pos().x if apple is Touchable else apple.position.x)
 	apple.z_index = 70
+	if asleep:
+		await wake()
+	busy = true
+	await _settle()
+	var ax: float = apple.world_pos().x if apple is Touchable else apple.position.x
+	if absf(ax - position.x) > 6 and signf(ax - position.x) != facing:
+		await turn_to(signf(ax - position.x))
+	if not is_instance_valid(apple):
+		busy = false
+		return
+	var s := depth_scale()
+	var mouth_down := mouth_world() + Vector2(EAT_DROP.x * facing, EAT_DROP.y) * s
 	var t := create_tween()
 	_react_tween = t
-	t.tween_property(apple, "global_position", meadow.world.to_global(mouth_world()), 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	t.parallel().tween_property(apple, "scale", apple.scale * 0.7, 0.3)
-	for i in 3:
-		t.tween_callback(func(): Sfx.play("munch", 1.0 + i * 0.05))
-		t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.1)
-		t.parallel().tween_property(apple, "scale", apple.scale * (0.55 - i * 0.17), 0.1)
-		t.tween_property(self, "squash_v", Vector2.ONE, 0.12)
-	t.tween_callback(func():
-		apple.queue_free()
-		Sfx.play("happy")
-		Fx.sparkles(meadow.fx, position + Vector2(0, -200) * depth_scale(), 10, 120, Color(1, 0.95, 0.75))
-		Fx.hearts(meadow.fx, head_world() + Vector2(0, -30), 2))
-	t.tween_property(self, "lift", 18.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	t.tween_property(self, "lift", 0.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	t.tween_callback(func():
-		busy = false
-		hungry = false
-		_hunger_at = _age + 150.0
-		ate.emit())
-	Log.event("food_given", how)
+	t.tween_property(apple, "global_position", meadow.world.to_global(mouth_down), 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.parallel().tween_property(apple, "scale", apple.scale * 0.7, 0.28)
+	var base_scale_apple: Vector2 = apple.scale * 0.7
+	var bite := func(i: int):
+		Sfx.play("munch", 1.0 + i * 0.05)
+		if is_instance_valid(apple):
+			var tb := create_tween()
+			tb.tween_property(apple, "scale", base_scale_apple * (0.7 - i * 0.25), 0.08)
+	var gone := func():
+		if is_instance_valid(apple):
+			apple.queue_free()
+	if _has("eat"):
+		await play_clip("eat", 12.0, false, {4: bite.bind(0), 7: bite.bind(1), 10: bite.bind(2), 11: gone})
+	else:
+		for i in 3:
+			bite.call(i)
+			await get_tree().create_timer(0.22).timeout
+		gone.call()
+	Sfx.play("happy")
+	Fx.sparkles(meadow.fx, position + Vector2(0, -200) * depth_scale(), 10, 120, Color(1, 0.95, 0.75))
+	Fx.hearts(meadow.fx, head_world() + Vector2(0, -30), 2)
+	var th := create_tween()
+	th.tween_property(self, "lift", 18.0, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	th.tween_property(self, "lift", 0.0, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await th.finished
+	busy = false
+	hungry = false
+	_hunger_at = _age + 150.0
+	ate.emit()
 
 
 func hunger_cue() -> void:
-	## variant A: it looks over at the apple tree and sighs; main.gd makes the apples glow
+	## variant A: it turns to the apple tree, looks up at it and sighs; main.gd makes the apples glow
 	busy = true
-	face_toward(meadow.tree_position().x)
-	var t := create_tween()
-	t.tween_interval(0.25)
-	t.tween_callback(func(): Sfx.play("sigh"))
-	t.tween_property(self, "squash_v", Vector2(1.04, 0.94), 0.6).set_trans(Tween.TRANS_SINE)
-	t.parallel().tween_property(self, "tilt", -0.05 * facing, 0.6).set_trans(Tween.TRANS_SINE)
-	t.tween_property(self, "squash_v", Vector2.ONE, 0.8).set_trans(Tween.TRANS_SINE)
-	t.parallel().tween_property(self, "tilt", 0.0, 0.8).set_trans(Tween.TRANS_SINE)
-	t.tween_callback(func(): busy = false)
+	await _settle()
 	meadow.hint_food()
 	Log.event("need_cue", "hunger")
+	var tx: float = meadow.tree_position().x
+	if absf(tx - position.x) > 6 and signf(tx - position.x) != facing:
+		await turn_to(signf(tx - position.x))
+	if _has("hunger"):
+		await play_clip("hunger", 12.0, false, {9: func(): Sfx.play("sigh")})
+	else:
+		Sfx.play("sigh")
+		await get_tree().create_timer(1.4).timeout
+	busy = false
 
 
 func appear(from: Vector2) -> void:
@@ -269,16 +431,13 @@ func appear(from: Vector2) -> void:
 		walk_to(from + Vector2(120, 50), 0.8))
 
 
-var _still_for := 0.0
-
-
-func _play(anim: String) -> void:
-	## swap loops around the shared anchor; a small squash hides the change of pose
+func _play(anim: String, quiet := false) -> void:
+	## start a loop around the shared anchor; a small squash hides the change from walking to sitting
 	var info: Dictionary = anims[anim]
 	sprite.offset = -Vector2(info["anchor"][0], info["anchor"][1])
 	sprite.speed_scale = 1.0
 	sprite.play(anim)
-	if anim == "idle" and not busy:
+	if anim == "idle" and not busy and not quiet:
 		var t := create_tween()
 		t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.07)
 		t.tween_property(self, "squash_v", Vector2.ONE, 0.12)
@@ -296,21 +455,24 @@ func _wander_gap() -> float:
 # ------------------------------------------------------------------ every frame
 func _process(delta: float) -> void:
 	_age += delta
+	if not _clip.is_empty():
+		_step_clip(delta)
 	var moving := false
-	if target != null and not busy:
+	if target != null and not busy and not turning and not asleep:
 		var d: Vector2 = target - position
-		var step := WALK_SPEED * speed_factor * delta
-		if d.length() <= step:
-			position = target
-			target = null
-			_arrive()
-		else:
-			position += d.normalized() * step
-			moving = true
-			if absf(d.x) > 3:
-				face_toward(position.x + d.x)
-	var has_walk := anims.has("walk")
-	if has_walk:
+		if absf(d.x) > 3 and signf(d.x) != facing:
+			face_toward(position.x + d.x)
+		if not turning:
+			var step := WALK_SPEED * speed_factor * delta
+			if d.length() <= step:
+				position = target
+				target = null
+				_arrive()
+			else:
+				position += d.normalized() * step
+				moving = true
+	var has_walk := _has("walk")
+	if has_walk and _clip.is_empty() and not asleep:
 		if moving:
 			_still_for = 0.0
 			if sprite.animation != "walk":
@@ -321,7 +483,7 @@ func _process(delta: float) -> void:
 			sprite.speed_scale = clampf(w["stance"] * v / (w["stride"] * depth_scale()), 0.4, 3.0)
 		else:
 			_still_for += delta
-			if sprite.animation == "walk" and _still_for > 0.12:
+			if sprite.animation == "walk" and _still_for > 0.12 and target == null:
 				_play("idle")
 	_walk_amount = move_toward(_walk_amount, 1.0 if (moving and not has_walk) else 0.0, delta * 6.0)
 	if moving and not has_walk:
@@ -334,8 +496,18 @@ func _process(delta: float) -> void:
 	var info: Dictionary = anims[sprite.animation]
 	shadow.scale = Vector2(info["shadow"][1], info["shadow"][1] * 0.17) / 256.0 * s * (1.0 - clampf((lift + hop) / 160.0, 0.0, 0.35))
 	shadow.position = Vector2(info["shadow"][0] * facing, -4) * s
+	var calm := target == null and not busy and not turning and not _dragging and _clip.is_empty()
+	# bedtime: it dozes off at night and wakes at dawn
+	var night: bool = meadow != null and meadow.time != null and meadow.time.is_night()
+	if asleep:
+		if not night and not busy:
+			wake()
+		return
+	if night and calm and _age > _stay_awake_until:
+		fall_asleep()
+		return
 	# idle life: wander a little now and then
-	if target == null and not busy and not _dragging:
+	if calm:
 		_idle_for += delta
 		if _idle_for > _next_wander:
 			_idle_for = 0.0
@@ -346,7 +518,7 @@ func _process(delta: float) -> void:
 	if Game.variant == "A" and not hungry and _age > _hunger_at:
 		hungry = true
 		_next_cue = _age
-	if hungry and Game.variant == "A" and not busy and target == null and not _dragging and _age >= _next_cue:
+	if hungry and Game.variant == "A" and calm and _age >= _next_cue:
 		_next_cue = _age + 22.0
 		hunger_cue()
 

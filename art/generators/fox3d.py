@@ -1425,6 +1425,153 @@ class WalkRig(FoxRig):
             ob.hide_render = True
 
 
+def _ss1(a, b, x):
+    """scalar smoothstep"""
+    if a == b:
+        return 1.0 if x >= b else 0.0
+    t = min(1.0, max(0.0, (x - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
+def _win(u, a, b, c, d):
+    """0 before a, rises to 1 by b, holds, falls back to 0 by d"""
+    return _ss1(a, b, u) * (1.0 - _ss1(c, d, u))
+
+
+class ReactRig(FoxRig):
+    """One-shot reactions and the turn, on top of the idle rig. Each motion is a set of curves over the clip (head pitch, yaw
+    and roll, ears, a tail wag, breath, eyes, a lift and a turn of the whole fox about its ground point). Clips that return to
+    rest start and end on the idle loop's first frame, so the game can cut from idle to a reaction and back without a jump.
+      eat     head dips to the apple, three chews with the eyes shut, back up
+      happy   eyes squeezed shut, head rocks side to side, tails wag, a little bounce
+      hunger  looks up with ears perked, then a sigh: the head sinks, a slow blink
+      doze    the head sinks and the eyes close; ends asleep sitting up (the game then fades to the sleep loop)
+      sleep   the curled-up loop: slow deep breathing, a faint head sway
+      turn    half a turn on the spot, from facing right to facing the camera. The game plays it forward, then mirrored and
+              backward, so the fox ends facing left (and the reverse for left to right)."""
+
+    HALF_TURN = 50.0                    # degrees from the three-quarter view to facing the camera (the camera is at 40)
+
+    def __init__(self, fox, motion):
+        super().__init__(fox)
+        self.motion = motion
+        self.cur = {}
+        self.whole = [o for o in bpy.data.objects if o.type in ("MESH", "CURVES", "CURVE") and not o.name.startswith("ground")]
+        # undo the pose's own head turn at the front-facing frame, so it mirrors cleanly
+        self.head_rot = fox.pose.get("head_rot", (0, 0, 0))
+
+    def clip_u(self, f, nfr):
+        if self.motion == "turn":
+            return f / (2 * (nfr - 1))                     # the rendered half: 0 .. 0.5 of the whole turn
+        if self.motion == "doze":
+            return f / (nfr - 1)                           # ends on its last frame
+        return f / nfr
+
+    def params(self, u):
+        m, d = self.motion, math.radians
+        p = dict(pitch=0.0, yaw=0.0, roll=0.0, ear=0.0, wag=0.0, wag_cycles=2, breath=0.0, closed=False, lift=0.0, turn=0.0,
+                 tail_turn=0.0, sway=1.0)
+        if m == "eat":
+            down = _win(u, 0.0, 0.22, 0.78, 1.0)
+            chewing = _win(u, 0.22, 0.3, 0.7, 0.78)
+            chew = math.sin(2 * math.pi * 3 * (u - 0.22) / 0.56)
+            p.update(pitch=d(22) * down + d(4) * chew * chewing, roll=d(2.5) * chew * chewing, ear=d(-7) * down,
+                     closed=0.3 <= u < 0.7)
+        elif m == "happy":
+            w = _win(u, 0.0, 0.14, 0.72, 1.0)
+            p.update(roll=d(10) * math.sin(4 * math.pi * u) * w, yaw=d(-5) * w, pitch=d(-6) * w, ear=d(-6) * w,
+                     wag=d(16) * w, wag_cycles=3, closed=0.12 <= u < 0.8, lift=0.09 * abs(math.sin(4 * math.pi * u)) * w)
+        elif m == "hunger":
+            look = _win(u, 0.0, 0.18, 0.42, 0.58)
+            sigh = _win(u, 0.5, 0.64, 0.8, 1.0)
+            inhale = _win(u, 0.36, 0.46, 0.5, 0.62)
+            p.update(pitch=d(-15) * look + d(10) * sigh, yaw=d(-4) * look, ear=d(10) * look + d(-9) * sigh,
+                     breath=0.05 * inhale - 0.04 * sigh, closed=0.64 <= u < 0.76)
+        elif m == "doze":
+            s = _ss1(0.0, 1.0, u)
+            nod = math.sin(math.pi * _ss1(0.35, 0.7, u)) * d(-4)          # one little catch before it settles
+            p.update(pitch=d(24) * s ** 1.3 + nod, ear=d(-12) * s, closed=u > 0.55, sway=1.0 - 0.7 * s)
+        elif m == "sleep":
+            p.update(sway=0.3, breath=0.02 * math.sin(2 * math.pi * u))
+        elif m == "turn":
+            # s runs 0..0.5 over the rendered half; the whole turn eases in and out, so the middle is the fastest part
+            s = u
+            e = s * s * s * (s * (6 * s - 15) + 10)
+            mid = math.sin(math.pi * s) ** 2                                  # 0 at rest, 1 when facing the camera
+            hp, hy, hr = self.head_rot
+            p.update(turn=-d(2 * self.HALF_TURN) * e, lift=0.12 * mid, yaw=-d(9) * math.sin(2 * math.pi * s) + d(-hy) * mid,
+                     roll=d(-hr) * mid, tail_turn=d(12) * math.sin(2 * math.pi * s), ear=d(6) * mid, sway=1.0 - mid)
+        return p
+
+    # ---- the idle motions, plus the clip's curves
+    def head_tf(self, ph):
+        c, k = self.cur, self.cur.get("sway", 1.0)
+        R0 = _rot((0, 0, 1), math.radians(3.0) * k * math.sin(ph + 0.8)) @ _rot((1, 0, 0), math.radians(2.6) * k * math.sin(ph)) \
+            @ _rot((0, 1, 0), math.radians(1.6) * k * math.sin(2 * ph))
+        R = _rot((0, 0, 1), c.get("yaw", 0.0)) @ _rot((1, 0, 0), c.get("roll", 0.0)) @ _rot((0, 1, 0), c.get("pitch", 0.0)) @ R0
+        return lambda p: (p - self.pivot) @ R.T + self.pivot
+
+    def ear_tf(self, ei, f, nfr):
+        b, ax = self.ears[ei]
+        ang = self.cur.get("ear", 0.0)
+        if ei == 1:
+            ang += math.radians(2.5) * math.sin(2 * math.pi * f / nfr + 2.0) * self.cur.get("sway", 1.0)
+        R = _rot(ax, -ang)
+        return lambda p: (p - b) @ R.T + b
+
+    def tail_tf(self, ti, ph):
+        root, amp = self.tail_roots[ti], self.tail_amp[ti]
+        c = self.cur
+        wag, cyc, tt = c.get("wag", 0.0), c.get("wag_cycles", 2), c.get("tail_turn", 0.0)
+        u = c.get("u", 0.0)
+
+        def tf(p, t):
+            a = amp * c.get("sway", 1.0) * np.sin(ph + 1.3 * ti - 2.4 * t) * t ** 1.3 \
+                + wag * np.sin(2 * math.pi * cyc * u + 1.1 * ti - 2.0 * t) * t ** 1.2 + tt * t ** 1.5
+            cs, sn = np.cos(a), np.sin(a)
+            dd = p - root
+            out = dd.copy()
+            out[:, 0] = dd[:, 0] * cs - dd[:, 1] * sn
+            out[:, 1] = dd[:, 0] * sn + dd[:, 1] * cs
+            return out + root
+        return tf
+
+    def body_tf(self, ph, H):
+        sp = self.spine
+        breath = 0.028 * math.sin(ph) * self.cur.get("sway", 1.0) + self.cur.get("breath", 0.0)
+
+        def tf(p):
+            d2 = ((p[:, None, :] - sp[None, ::2, :]) ** 2).sum(-1)
+            j = np.argmin(d2, axis=1) * 2
+            uu = j / (len(sp) - 1)
+            radial = p - sp[j]
+            w = np.exp(-((uu - 0.55) / 0.3) ** 2) * ss(1.2, 0.6, np.linalg.norm(radial, axis=1))
+            q = p + radial * (breath * w)[:, None]
+            wh = ss(1.55, 0.95, np.linalg.norm(p - self.hc, axis=1) / self.fox.hs)
+            return q + (H(q) - q) * wh[:, None]
+        return tf
+
+    def frame(self, f, nfr):
+        u = self.clip_u(f, nfr)
+        self.cur = self.params(u)
+        self.cur["u"] = u
+        # the idle phase: one full cycle over a clip that returns to rest; held at 0 for the turn and doze
+        ph_frame = f if self.motion in ("eat", "happy", "hunger", "sleep") else 0
+        super().frame(ph_frame, nfr)
+        if self.fox.blink_open:
+            for ob in self.fox.blink_open:
+                ob.hide_render = self.cur["closed"]
+            for ob in self.fox.blink_closed:
+                ob.hide_render = not self.cur["closed"]
+        for ob in self.whole:                               # the whole fox turns about its ground point and lifts
+            ob.rotation_euler = (0.0, 0.0, self.cur["turn"])
+            ob.location = (0.0, 0.0, self.cur["lift"])
+
+    @staticmethod
+    def blink_frames(nfr):
+        return set()
+
+
 def anchor_px(sc, cam, p):
     """where a world point lands in the rendered frame, in pixels from the top left"""
     from bpy_extras.object_utils import world_to_camera_view
@@ -1465,7 +1612,7 @@ def render_anim(P, pose, view, out, size, nfr, traits, motion="idle"):
     sc.cycles.samples = int(os.environ.get("FOX_SAMPLES", "64"))
     sc.render.resolution_x, sc.render.resolution_y = size, int(round(size * 0.913))
     fox = Fox3D(P, pose, traits or {})
-    rig = WalkRig(fox) if motion == "walk" else FoxRig(fox)
+    rig = WalkRig(fox) if motion == "walk" else FoxRig(fox) if motion == "idle" else ReactRig(fox, motion)
     cam = stage(sc, view)
     d = os.path.join(out, f"{pose}-{view}-{motion}")
     os.makedirs(d, exist_ok=True)
@@ -1532,6 +1679,15 @@ if __name__ == "__main__":
             tag = f"-t{traits['tails']}"
     anim = [a.split("=", 1)[1] for a in argv if a.startswith("--anim=")]
     walk = [a.split("=", 1)[1] for a in argv if a.startswith("--walk=")]
+    react = [a.split("=", 1)[1] for a in argv if a.startswith("--react=")]
+    if react:                                           # --react=motion:pose:view, e.g. eat:sit:three, turn:stand:three
+        size = next((int(a.split("=")[1]) for a in argv if a.startswith("--size=")), 640)
+        for job in react:
+            parts = job.split(":")
+            motion, pose, view = parts[0], parts[1], parts[2]
+            nfr = int(parts[3]) if len(parts) > 3 else dict(eat=16, happy=16, hunger=24, doze=14, sleep=24, turn=8)[motion]
+            render_anim(EMBER, pose, view, out, size, nfr, traits, motion)
+        sys.exit(0)
     if walk:
         size = next((int(a.split("=")[1]) for a in argv if a.startswith("--size=")), 640)
         nfr = next((int(a.split("=")[1]) for a in argv if a.startswith("--frames=")), 12)

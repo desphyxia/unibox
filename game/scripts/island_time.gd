@@ -42,6 +42,11 @@ func _ready() -> void:
 		stars.add_child(s)
 
 
+func is_night() -> bool:
+	## bedtime for the creatures: from 20:00 to dawn
+	return hour >= 20.0 or hour < 5.8
+
+
 func tint_at(h: float) -> Color:
 	for i in KEYS.size() - 1:
 		var a = KEYS[i]

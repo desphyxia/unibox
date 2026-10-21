@@ -33,7 +33,7 @@ var _finger := -1                           ## the touch being followed; Safari 
 
 func _ready() -> void:
 	randomize()
-	frames = _load_frames("res://art/creatures/%s" % Game.kind, ["idle", "walk"])
+	frames = _load_frames("res://art/creatures/%s" % Game.kind, ["idle", "walk", "sleep", "eat", "happy", "hunger", "doze", "turn_sit", "turn_stand"])
 	_build_world()
 	ui = ParentUI.new()
 	add_child(ui)
@@ -58,7 +58,7 @@ func _load_frames(folder: String, names: Array) -> SpriteFrames:
 		anim_info[anim] = info
 		f.add_animation(anim)
 		f.set_animation_speed(anim, float(info.get("fps", 12.0)))
-		f.set_animation_loop(anim, true)
+		f.set_animation_loop(anim, Creature.LOOPS.has(anim))
 		var i := 0
 		while ResourceLoader.exists("%s/frame_%02d.png" % [dir, i]):
 			f.add_frame(anim, load("%s/frame_%02d.png" % [dir, i]))

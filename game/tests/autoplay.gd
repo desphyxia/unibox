@@ -60,6 +60,12 @@ func _ready() -> void:
 	await wait(0.9)
 	await shot("walk")
 	await wait(2.5)
+	# call it back to the left: it turns round first
+	await tap(w(Vector2(300, 650)))
+	for k in 4:
+		await wait(0.13)
+		await shot("turn-%d" % k)
+	await wait(2.5)
 	# variant A: the hunger cue
 	c._hunger_at = 0.0
 	c.hungry = false
@@ -88,6 +94,11 @@ func _ready() -> void:
 	main.time.hour = 22.0
 	await wait(0.5)
 	await shot("night")
+	await wait(3.5)
+	await shot("asleep")
+	await tap(w(c.position + Vector2(20, -60)))
+	await wait(1.6)
+	await shot("woken")
 	print("AUTOPLAY DONE log=", ProjectSettings.globalize_path(Log.path))
 	get_tree().quit()
 

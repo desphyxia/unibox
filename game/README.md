@@ -15,7 +15,8 @@ Variant A (visible needs): about a minute after hatching, the fox looks at the t
 bounce and glow. It repeats every 22 seconds until the fox is fed, then comes back after 150 seconds. Nothing bad
 happens if it's ignored. Variant B shows no cues.
 
-Island time runs from dawn to dusk in about ten minutes, then has a short night.
+Island time runs from dawn to dusk in about ten minutes, then has a short night. At night the fox dozes off and
+sleeps until dawn; a tap wakes it.
 
 ## For the facilitator
 Press and hold the dots in the top-right corner, answer the grown-ups question, and the parent area opens. In it:
@@ -30,8 +31,9 @@ a **Copy all** button; this works on the iPad too, where the log sits in the bro
 name and no identifiers.
 
 ## Stand-ins
-- Rendered: the sitting idle loop and a walk cycle. The walk plays at the speed that keeps a paw on the ground in
-  step with the meadow. Reactions and eating are still squashes, hops and tilts of the idle loop.
+- Rendered: the sitting idle loop, a walk cycle, eating, a happy wiggle, the hunger look and sigh, dozing off, a
+  sleep loop, and turning round (sitting or standing). The walk plays at the speed that keeps a paw on the ground in
+  step with the meadow. A turn plays the rendered half-turn to the camera, then the same frames mirrored.
 - The meadow art is drawn from code (`art/generators/meadow.py`).
 - The sounds are synthesised (`art/generators/sfx.py`).
 - There's no music yet.
