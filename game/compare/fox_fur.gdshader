@@ -30,16 +30,19 @@ float vnoise(vec3 x) {
 
 void vertex() {
 	h = INSTANCE_CUSTOM.x;
-	root = VERTEX;
+	int id = int(CUSTOM1.z + 0.5);
+	vec3 pos; vec3 nrm; vec3 comb; vec3 br; float wh; float ll; float dl;
+	pose_fetch(id, pos, nrm, comb, br, wh, ll, dl);
+	vec4 leg = tx(id, 16);
+	root = VERTEX;                        // the sitting position: strands keep their pattern in every pose
 	tip = COLOR.a;
-	glow = CUSTOM3.y;
-	vec3 off = NORMAL * CUSTOM0.w * (1.0 - (1.0 - h) * (1.0 - h)) + CUSTOM0.xyz * pow(h, 1.15) - vec3(0.0, 1.0, 0.0) * CUSTOM3.x * h * h;
-	float L = length(CUSTOM0.xyz);
-	vec3 p = rig_move(VERTEX + off, CUSTOM1, CUSTOM2);
-	vec3 q = rig_move(VERTEX + off + NORMAL * 0.05, CUSTOM1, CUSTOM2);
+	glow = CUSTOM1.x;
+	vec3 off = nrm * ll * (1.0 - (1.0 - h) * (1.0 - h)) + comb * pow(h, 1.15) - vec3(0.0, 1.0, 0.0) * dl * h * h;
+	fur_len = length(comb);
+	vec3 p = rig_move(pos + off, br, wh, CUSTOM0, leg);
+	vec3 q = rig_move(pos + off + nrm * 0.05, br, wh, CUSTOM0, leg);
 	NORMAL = normalize(q - p);
-	fur_len = L;
-	VERTEX = rig_hidden(CUSTOM1) ? vec3(0.0) : p;
+	VERTEX = rig_hidden(CUSTOM0) ? vec3(0.0) : p;
 }
 
 void fragment() {

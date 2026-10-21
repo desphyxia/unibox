@@ -156,6 +156,13 @@ func _ready() -> void:
 	main.open_compare()
 	await wait(1.5)
 	await shot("compare")
+	for cl in [["walk", 0.45], ["eat", 0.6], ["happy", 0.45], ["hunger", 0.55], ["liedown", 0.85], ["sleep-loop", 1.6], ["wake", 0.6], ["turn", 0.3]]:
+		if cl[0] != "sleep-loop":
+			main.compare.play_clip(cl[0])
+		await wait(cl[1])
+		await shot("compare-" + cl[0])
+		await wait(1.8)
+	main.compare.play_clip("idle")
 	main.compare._zoom = 2.0
 	main.compare._layout()
 	await wait(0.6)

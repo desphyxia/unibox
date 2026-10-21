@@ -4,7 +4,10 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
 #include "res://compare/fox_rig.gdshaderinc"
 
 void vertex() {
-	VERTEX = rig_move(VERTEX, CUSTOM1, CUSTOM2);
+	int id = int(CUSTOM1.z + 0.5);
+	vec3 pos; vec3 nrm; vec3 comb; vec3 br; float wh; float ll; float dl;
+	pose_fetch(id, pos, nrm, comb, br, wh, ll, dl);
+	VERTEX = rig_move(pos, br, wh, CUSTOM0, vec4(0.0));
 }
 
 void fragment() {

@@ -42,10 +42,11 @@ name and no identifiers.
 ## The live 3D comparison (`compare/`)
 The parent area's **Compare** button opens the fox two ways over the meadow: on the left the rendered frames the game
 uses now, on the right the same model drawn live in 3D with shell fur (`live_fox.gd`, `fox_live.gdshader`,
-`fox_fur.gdshader`; the model is exported by `art/generators/fox_live_export.py`). Buttons: close-up, turn round (or
-drag the live fox), fur layers 8/16/24, colours (both recolour), back. The corner shows frames per second and how many
-triangles the live fox draws. The live fox only has the idle loop's motions so far (breathing, head, ears, tails,
-foxfire, blinks); walking and the other clips would need a skeleton.
+`fox_fur.gdshader`, `fox_rig.gdshaderinc`; the model is exported by `art/generators/fox_live_export.py`). Buttons: every
+clip (idle, walk, eat, happy, hungry, lie down, wake up, turn; both foxes play it together), spin (or drag the live
+fox), close-up, fur layers 6/8/12, colours (both recolour), back. The corner shows frames per second and the live
+fox's triangles (about 48 thousand with 8 fur layers). The live fox blends four exported poses (sit, stand, sphinx,
+curled up) and computes each clip from the same motion curves as the renders.
 
 ## Stand-ins
 - Rendered: the sitting idle loop, a walk cycle, eating, a happy wiggle, the hunger look and sigh, lying down to

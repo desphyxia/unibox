@@ -2,8 +2,8 @@ class_name CompareView
 extends CanvasLayer
 ## Side by side, for deciding how creatures are made: on the left the fox as it is in the game now (rendered frames), on
 ## the right the same fox as a live 3D model with shell fur (live_fox.gd), at the same size and camera angle. Buttons:
-## close-up, a full turn (live 3D can face any way), fewer or more fur layers, the colour traits (both recolour), back.
-## Drag the live fox to turn it. The corner shows frames per second, so it can be judged on the iPad and iPhone.
+## every clip the game has (both foxes play it together), close-up, fewer or more fur layers, the colour traits (both
+## recolour), back. Drag the live fox to turn it any way. The corner shows frames per second, so it can be judged on the iPad and iPhone.
 ## Opened from the parent area; the meadow waits underneath.
 
 signal closed
@@ -20,6 +20,9 @@ var sprite := AnimatedSprite2D.new()
 var view := SubViewport.new()
 var cam := Camera3D.new()
 var fox: LiveFox
+var spin := Node3D.new()                 ## the drag turns this; the fox's own turns happen inside it
+var sprite_facing := 1.0
+var _sprite_clip := "idle"
 var _zoom := 1.0
 var _turn := 0.0                         ## the live fox's own turn, radians
 var _auto_turn := false
@@ -87,9 +90,10 @@ func _build_3d() -> void:
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.far = 200.0
 	view.add_child(cam)
+	view.add_child(spin)
 	fox = LiveFox.new()
-	view.add_child(fox)
-	var r: Dictionary = fox.rig["camera"]
+	spin.add_child(fox)
+	var r: Dictionary = fox.meta["camera"]
 	var tgt := Vector3(r["center"][0], r["center"][1], r["center"][2])
 	var az := deg_to_rad(r["azimuth"])
 	var pitch := deg_to_rad(r["pitch"])
@@ -143,9 +147,12 @@ func _build_ui() -> void:
 	_bar.add_child(_button("Close-up", func():
 		_zoom = 2.0 if _zoom == 1.0 else 1.0
 		_layout()))
-	_bar.add_child(_button("Turn round", func(): _auto_turn = not _auto_turn))
+	for c in [["Idle", "idle"], ["Walk", "walk"], ["Eat", "eat"], ["Happy", "happy"], ["Hungry", "hunger"], ["Lie down", "liedown"],
+			["Wake up", "wake"], ["Turn", "turn"]]:
+		_bar.add_child(_button(c[0], play_clip.bind(c[1])))
+	_bar.add_child(_button("Spin", func(): _auto_turn = not _auto_turn))
 	_layers_btn = _button("Fur layers: %d" % fox.shells, func():
-		fox.shells = {8: 16, 16: 24, 24: 8}[fox.shells]
+		fox.shells = {6: 8, 8: 12, 12: 6}[fox.shells]
 		_layers_btn.text = "Fur layers: %d" % fox.shells)
 	_bar.add_child(_layers_btn)
 	_bar.add_child(_button("Colours", func():
@@ -161,8 +168,9 @@ func _build_ui() -> void:
 		root.add_child(l)
 	_fps.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var mb := FileAccess.get_file_as_bytes(LiveFox.DATA + ".bin").size() / 1.0e6
-	_cap_l.text = "Rendered frames (in the game now)\none way, 2-second loop, about %.0f MB for all the fox's clips" % SPRITE_MB
-	_cap_r.text = "Live 3D with shell fur\nany angle and any motion, model about %.1f MB" % mb
+	_cap_l.text = "Rendered frames (in the game now)\nabout %.0f MB for all the fox's clips" % SPRITE_MB
+	_cap_r.text = "Live 3D with shell fur\nevery clip computed live, model about %.1f MB" % mb
+	sprite.animation_finished.connect(_sprite_done)
 
 
 func _apply_look() -> void:
@@ -179,7 +187,7 @@ func _layout() -> void:
 	sprite.position = Vector2(v.x * 0.27, ground.y)
 	# the live fox's ground point lands at the same height on the right
 	cam.size = v.y / ppu
-	var g: Array = fox.rig["ground"]
+	var g: Array = fox.meta["ground"]
 	var tgt := cam.global_position + (-cam.global_transform.basis.z) * 40.0
 	var gp := Vector3(g[0], g[1], g[2])
 	var rel := cam.global_transform.basis.inverse() * (gp - tgt)   # where the ground point sits in the camera's plane
@@ -205,9 +213,56 @@ func _gui_input(e: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if _auto_turn:
 		_turn += delta * TAU / 4.0
-	fox.rotation.y = _turn
+	spin.rotation.y = _turn
 	_fps_avg = lerpf(_fps_avg, 1.0 / maxf(delta, 0.0001), 0.05)
-	_fps.text = "%.0f frames a second · live fox draws %dk triangles" % [_fps_avg, (fox.triangles + fox.fur_triangles()) / 1000]
+	_fps.text = "%.0f frames a second · live fox draws %dk triangles (%dk of them fur layers)" % [_fps_avg,
+		(fox.triangles + fox.fur_triangles()) / 1000, fox.fur_triangles() / 1000]
+
+
+# ------------------------------------------------------------------ clips, on both foxes at once
+const SPRITE_FPS := {"idle": 12.0, "walk": 12.0, "eat": 12.0, "happy": 14.0, "hunger": 12.0, "liedown": 12.0, "sleep": 12.0,
+	"wake": 15.0, "turn": 22.0}
+
+
+func play_clip(name: String) -> void:
+	if name == "wake" and fox.clip != "sleep":
+		return
+	if fox.clip == "sleep" and name != "wake":
+		return                           # asleep: only waking up
+	fox.play(name)
+	_sprite_play(name)
+
+
+func _sprite_name(name: String) -> String:
+	var n: String = {"wake": "liedown", "turn": "turn_sit"}.get(name, name)
+	var left := n + "_left"
+	return left if sprite_facing < 0 and frames.has_animation(left) else n
+
+
+func _sprite_play(name: String) -> void:
+	_sprite_clip = name
+	var anim := _sprite_name(name)
+	sprite.animation = anim
+	var a: Array = anim_info[anim]["anchor"]
+	sprite.offset = -Vector2(a[0], a[1])
+	sprite.speed_scale = SPRITE_FPS[name] / frames.get_animation_speed(anim)
+	if name == "wake":
+		sprite.play_backwards(anim)
+	else:
+		sprite.play(anim)
+
+
+func _sprite_done() -> void:
+	match _sprite_clip:
+		"liedown":
+			_sprite_play("sleep")
+		"turn":
+			sprite_facing = -sprite_facing
+			_sprite_play("idle")
+		"idle", "walk", "sleep":
+			pass
+		_:
+			_sprite_play("idle")
 
 
 func close() -> void:
