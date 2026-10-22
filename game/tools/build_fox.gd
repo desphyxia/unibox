@@ -8,7 +8,10 @@ extends SceneTree
 ##   - blend shapes: standing, lying like a sphinx, curled up asleep (the sitting fox is the rest shape), and breathing
 ##     (the sitting chest's breath, used awake, and the curled-up one, used asleep);
 ##   - every clip baked from the motion curves the Blender renders used (FoxRig, WalkRig, ReactRig in fox3d.py): idle,
-##     walk, eat, happy, hunger, liedown, sleep, wake, and the half turns sitting and standing from either side.
+##     walk, eat, happy, hunger, liedown, sleep, wake, and the half turns sitting and standing from either side;
+##   - places to wear things (the top of the head, the ribbon round the neck, a tail near its tip), each with the bone
+##     that carries it and where it sits in every pose, and the head's pivot in each pose and which way it faces, for
+##     looking at things.
 ## Then it checks the skinned fox against those curves, vertex by vertex, and prints the largest gap per clip.
 ##   godot --headless --path . -s res://tools/build_fox.gd
 
@@ -88,7 +91,8 @@ func _initialize() -> void:
 			_frame.bind(c), fires))
 	_check()
 	var err := B.save_scene(OUT, "Fox", B.make_skeleton(bones), B.make_skin(bones), {"Skin": skin_mesh, "Fur": fur_mesh},
-		anims, {"camera": meta["camera"], "ground": meta["ground"], "turn_deg": TURN_DEG, "poses": POSES})
+		anims, {"camera": meta["camera"], "ground": meta["ground"], "turn_deg": TURN_DEG, "poses": POSES,
+			"pivots": _pivots(), "head_forward": _head_forward(), "neck_gain": neck_gain, "wear": _wear_places()})
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
 
@@ -511,6 +515,113 @@ func _frame(tm: float, name: String) -> Dictionary:
 	if _split(name)[0] != "idle":      # the idle blinks are left to the game, at random
 		f["values"] = {"eyes_closed": 1.0 if r["closed"] else 0.0}
 	return f
+
+
+# ------------------------------------------------------------------ looking and wearing
+func _pivots() -> Array:
+	var out := []
+	for p in POSES:
+		out.append(_v(rig[p]["pivot"]))
+	return out
+
+
+func _pick(test: Callable) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for i in n:
+		if test.call(i):
+			out.append(i)
+	return out
+
+
+func _most(idx: PackedInt32Array, key: Callable, count: int) -> PackedInt32Array:
+	## the `count` points of idx with the biggest key (sitting)
+	var arr := Array(idx)
+	arr.sort_custom(func(a, b): return key.call(pos[0][a]) > key.call(pos[0][b]))
+	return PackedInt32Array(arr.slice(0, count))
+
+
+func _centroid(p: int, idx: PackedInt32Array) -> Vector3:
+	var c := Vector3.ZERO
+	for i in idx:
+		c += pos[p][i]
+	return c / maxi(idx.size(), 1)
+
+
+static func _frame3(a: Vector3, b: Vector3, c: Vector3) -> Basis:
+	## a frame from three points: x along a to b, y toward c across it
+	var x := (b - a).normalized()
+	var y := c - a
+	y = (y - x * y.dot(x)).normalized()
+	return Basis(x, y, x.cross(y))
+
+
+func _follow(groups: Array, at_sit: Transform3D) -> Array:
+	## a place in every pose, moving with three groups of points as if they were one rigid piece
+	var f := []
+	for p in 4:
+		var c := [_centroid(p, groups[0]), _centroid(p, groups[1]), _centroid(p, groups[2])]
+		f.append(Transform3D(_frame3(c[0], c[1], c[2]), c[0]))
+	var out := []
+	for p in 4:
+		out.append((f[p] as Transform3D) * (f[0] as Transform3D).affine_inverse() * at_sit)
+	return out
+
+
+func _head_forward() -> Vector3:
+	var head := _pick(func(i): return kind[i] == 1)
+	return (_centroid(0, _most(head, func(v): return v.x, 40)) - _v(rig["sit"]["pivot"])).normalized()
+
+
+func _wear_places() -> Dictionary:
+	# the head is rigid in every pose: its snout, its crown and one cheek carry the place on top of the head
+	var head := _pick(func(i): return kind[i] == 1)
+	var snout := _most(head, func(v): return v.x, 40)
+	var crown := _most(head, func(v): return v.y, 40)
+	var cheek := _most(head, func(v): return v.z, 40)
+	var top := _centroid(0, crown)
+	var skull := _pick(func(i): return kind[i] == 1 and pos[0][i].y > top.y - 0.45)
+	var half := 0.0
+	for i in skull:
+		half = maxf(half, absf(pos[0][i].z - top.z))
+	# the ribbon round the neck: pink points near the neck, in three groups round the ring
+	var piv := _v(rig["sit"]["pivot"])
+	var ribbon := _pick(func(i): return kind[i] == 0 and surface[i] == 0.0 and col[i].r > 0.85 and col[i].g < 0.45 		and col[i].b > 0.35 and pos[0][i].distance_to(piv + Vector3(0, -0.5, 0)) < 0.9)
+	# its middle: the middle of its box (the bow at the back holds most of the points, so not their average)
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	for i in ribbon:
+		lo = lo.min(pos[0][i])
+		hi = hi.max(pos[0][i])
+	var rc := (lo + hi) / 2.0
+	var sectors := [PackedInt32Array(), PackedInt32Array(), PackedInt32Array()]
+	for i in ribbon:
+		var d: Vector3 = pos[0][i] - rc
+		sectors[int(fposmod(atan2(d.z, d.x) / TAU * 3.0, 3.0))].append(i)
+	var ring := _frame3(_centroid(0, sectors[0]), _centroid(0, sectors[1]), _centroid(0, sectors[2]))
+	var up := ring.z if ring.z.y > 0.0 else -ring.z
+	var fwd := (Vector3.RIGHT - up * up.x).normalized()
+	var neck_r := ((hi.x - lo.x) + (hi.z - lo.z)) / 4.0
+	# a tail near its tip: the first tail's points from 0.74 to 0.9 along it
+	var near := _pick(func(i): return kind[i] == 3 and which[i] == 0 and tail_t[i] > 0.74 and tail_t[i] < 0.78)
+	var far := _pick(func(i): return kind[i] == 3 and which[i] == 0 and tail_t[i] > 0.86 and tail_t[i] < 0.9)
+	var both := near.duplicate()
+	both.append_array(far)
+	var upper := _most(both, func(v): return v.y, maxi(both.size() / 4, 3))
+	var mid := _pick(func(i): return kind[i] == 3 and which[i] == 0 and tail_t[i] > 0.78 and tail_t[i] < 0.86)
+	var tc := _centroid(0, mid)
+	var along := (_centroid(0, far) - _centroid(0, near)).normalized()
+	var tail_r := 0.0
+	for i in mid:
+		var d: Vector3 = pos[0][i] - tc
+		tail_r += (d - along * d.dot(along)).length()
+	tail_r /= maxi(mid.size(), 1)
+	var t_up := (Vector3.UP - along * along.y).normalized()
+	return {
+		"head": {"bone": "head", "size": half, "poses": _follow([snout, crown, cheek], Transform3D(Basis(), top + Vector3(0, -0.05, 0)))},
+		"neck": {"bone": "body", "size": neck_r, "poses": _follow(sectors, Transform3D(Basis(fwd, up, fwd.cross(up)), rc))},
+		"tail": {"bone": "tail_0_4", "size": tail_r, "poses": _follow([near, far, upper],
+			Transform3D(Basis(along, t_up, along.cross(t_up)), tc + t_up * tail_r * 0.8))},
+	}
 
 
 # ------------------------------------------------------------------ the check

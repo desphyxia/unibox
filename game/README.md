@@ -11,6 +11,11 @@ meadow (see "Live 3D foxes" below).
 - **Feed it:** drag an apple from the tree to its mouth, or drop one near it on the grass and it walks over to eat.
   Apples grow back.
 - **Name tag:** the paw tag above the fox opens the parental gate, then a name field for a grown-up.
+- **Dress up:** the basket in the bottom-right corner holds a flower crown, a scarf and a bow. Drag one onto a fox and
+  it wears it (crown on its head, scarf round its neck, bow on a tail); it stays on through walking, turning, eating and
+  sleeping. Drag it off to take it back; a tap on it pats the fox as usual.
+- **It looks at you:** while a finger is on the meadow (or carries an apple), a fox that isn't busy turns its head to
+  look at it.
 - **A second fox and an egg:** about four minutes after the hatch, an adult fox in other colours trots in and sits by
   the nest, and the nest glows. Bring your fox over (drag it, or tap the meadow next to the other one): the two sit
   either side of the nest, greet each other, and an egg appears. The trait picker opens: the parents stand at the
@@ -45,8 +50,11 @@ Every fox is the same 3D model, a standard Godot scene (`creatures/fox/fox.scn`)
 head, ears, six along each tail, hip, knee and paw for each leg, the foxfires, and neck helpers), a skinned "Skin" and
 "Fur" mesh with the four poses (sit, stand, sphinx, curled up) and the breathing as blend shapes, and an
 AnimationPlayer with every clip: idle, walk, eat, happy, hungry, lie down, sleep, wake up, and a half turn sitting or
-standing from either side. `creatures/creature_model.gd` runs it: it plays the clips, adds the fur layers, the trait
-colours and the idle blinks, and turns the fox to face either way. Fur is shell fur: the furry skin plus 6 thin copies
+standing from either side. `creatures/creature_model.gd` runs it: it plays the clips (each blending into the next over
+0.2 seconds, except out of a turn), adds the fur layers, the trait colours and the idle blinks, and turns the fox to
+face either way. `creatures/head_look.gd` (a skeleton modifier) turns the head and neck toward something after the
+clip. Things to wear (`scripts/wardrobe.gd`, made in code) sit at places the build found on the fox, the top of the
+head, the ribbon round the neck and a tail near its tip, each carried by its bone and placed for every pose. Fur is shell fur: the furry skin plus 6 thin copies
 of it (4 for babies) stacked in one mesh and lifted along the fur when the game starts, so the skeleton carries them
 (the web renderer gives shaders no tangents, so the fur can't be grown in the shader), with holes cut by a small stored
 noise texture (`creatures/shaders/`). Coat

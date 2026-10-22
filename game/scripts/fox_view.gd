@@ -17,6 +17,7 @@ var pic := Sprite2D.new()
 var ppu := 40.0                                  ## the picture's pixels per model unit: about its size on screen
 static var sharpness := 1.0                      ## pictures are made at this times their size in the meadow's units
 var _shown := true
+var _at := Vector2.ZERO                          ## the ground point in the picture, its pixels
 
 
 func _init(p_ppu := 40.0) -> void:
@@ -39,6 +40,7 @@ func _ready() -> void:
 	var rel := cam.global_transform.basis.inverse() * (gp - tgt)
 	var size := Vector2(view.size)
 	var at := -BOX.position * ppu
+	_at = at
 	cam.size = size.y / ppu
 	cam.h_offset = rel.x - (at.x - size.x / 2.0) / ppu
 	cam.v_offset = rel.y + (at.y - size.y / 2.0) / ppu
@@ -48,6 +50,21 @@ func _ready() -> void:
 	pic.scale = Vector2.ONE * RENDER_PPU / ppu
 	pic.material = premultiplied()
 	add_child(pic)
+
+
+func look_toward(local: Vector2) -> void:
+	## look at a point given in this node's units (render pixels from the ground point): a point on the picture's plane
+	## through the ground point, brought a little toward the viewer, so the fox looks out at a finger on the glass
+	var g: Array = fox.get_meta("ground")
+	var b := cam.global_transform.basis
+	var p := Vector3(g[0], g[1], g[2]) + b.x * (local.x / RENDER_PPU) - b.y * (local.y / RENDER_PPU) + b.z * 2.5
+	fox.look.target = fox.global_transform.affine_inverse() * p
+
+
+func to_picture(model_point: Vector3) -> Vector2:
+	## a point on the fox (its own space) in this node's units
+	var q := cam.unproject_position(fox.global_transform * model_point)
+	return (q - _at) * RENDER_PPU / ppu
 
 
 static func premultiplied() -> CanvasItemMaterial:

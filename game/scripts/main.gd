@@ -34,6 +34,8 @@ var _spots_used := {}
 var _active: Touchable = null
 var _ground_press = null
 var _finger := -1                           ## the touch being followed; Safari numbers touches arbitrarily, not from 0
+var finger = null                           ## Vector2: where that finger is on the meadow while it is down (creatures look)
+var wardrobe: Wardrobe                      ## the basket of things to wear
 
 
 func _ready() -> void:
@@ -129,6 +131,9 @@ func _build_world() -> void:
 		s.scale = Vector2.ONE * 0.5
 		s.offset = Vector2(-240, -100)
 		nest.add_child(s)
+	wardrobe = Wardrobe.new()
+	wardrobe.meadow = self
+	world.add_child(wardrobe)
 	fx.z_index = 60
 	world.add_child(fx)
 	overlay.z_index = 80
@@ -283,6 +288,7 @@ func _exit_tree() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		_finger = -1                                # a lift we never heard about must not lock out the next touch
+		finger = null
 		_active = null
 		_ground_press = null
 
@@ -326,6 +332,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			sky.tap()                               ## its lift is then ignored: no finger is being followed
 			return
 		var p := _to_world(e.position)
+		finger = p if e.pressed else null
 		if e.pressed:
 			_finger = e.index
 			_active = _pick(p)
@@ -342,8 +349,10 @@ func _unhandled_input(e: InputEvent) -> void:
 			_active = null
 			_ground_press = null
 			_finger = -1
-	elif e is InputEventScreenDrag and e.index == _finger and _active and is_instance_valid(_active):
-		_active.touch_move(_to_world(e.position))
+	elif e is InputEventScreenDrag and e.index == _finger:
+		finger = _to_world(e.position)
+		if _active and is_instance_valid(_active):
+			_active.touch_move(finger)
 
 
 func _ground_tap(p: Vector2) -> void:
