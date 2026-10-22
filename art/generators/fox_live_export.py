@@ -18,7 +18,8 @@ Per vertex, per pose (a float texture, 17 texels a vertex): position + fur lift,
 direction times length), breathing push + head blend at the neck; then the walk's leg weight (leg, weight, place).
 Godot's axes: x, z, -y of Blender's.
 
-Run:  blender -b --factory-startup -P fox_live_export.py -- OUT.bin
+Run:  blender -b --factory-startup -P fox_live_export.py -- ../exports/fox_live.bin
+Then game/tools/build_fox.gd turns it into the model the game draws (a skeleton, pose blend shapes, baked clips).
 Writes OUT.bin (attributes, indices, pose texture) and OUT.json (layout, rig per pose, walk legs)."""
 import bpy, bmesh, sys, os, json, math
 import numpy as np

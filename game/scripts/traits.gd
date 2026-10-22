@@ -1,7 +1,7 @@
 class_name Traits
 ## The traits a creature can inherit, in the first session two of them: coat colour and glow colour (tail tips and
 ## foxfire). Both are made by the live fox's shaders recolouring its model's colours (trait_colour in
-## compare/fox_rig.gdshaderinc), so a new colour costs no download. A baby takes each trait from one of its parents,
+## creatures/shaders/creature.gdshaderinc), so a new colour costs no download. A baby takes each trait from one of its parents,
 ## as the child chooses.
 
 const BASE_COAT := Color("ffa877")             ## the rendered apricot, the mid tone of the coat

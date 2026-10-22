@@ -1,0 +1,240 @@
+class_name CreatureModel
+extends Node3D
+## A creature as the game draws it: the scene a creature's build tool makes (tools/build_fox.gd with
+## tools/creature_builder.gd): a standard Skeleton3D, a "Skin" mesh (skin, eyes, glowing parts, and a second surface for
+## the glow round them) and a "Fur" mesh (the furry skin), both skinned, with the poses as blend shapes, and an
+## AnimationPlayer holding every clip. This script adds the shell fur (the Fur mesh stacked with thin copies of itself,
+## all in one mesh, so the engine poses it once a frame), the trait colours, the idle blinks and which way it faces,
+## and plays the clips.
+##   idle, walk, eat, happy, hunger, liedown, sleep, wake (loops: idle, walk, sleep), turn and turn_stand (half way
+##   round, sitting or standing; the creature then faces the other way)
+
+signal clip_done(name: String)
+
+const LOOPING := ["idle", "walk", "sleep"]
+
+var shells := 6:                       ## fur layers over the skin
+	set(v):
+		shells = v
+		if _fur:
+			_fur.mesh = _layered(_fur_source, shells)
+var facing := 1.0                      ## 1 as built, -1 turned round (the left-facing view)
+var speed := 1.0:                      ## how fast the clip plays (the walk keeps pace with the ground this way)
+	set(v):
+		speed = v
+		if _player:
+			_player.speed_scale = _clip_scale * speed
+var auto_next := true                  ## after a one-shot clip: idle (or sleep after lying down); off when a creature leads
+var random_start := false              ## start the idle loop at a random place, so not every creature breathes in step
+var clip := "idle"
+var eyes_closed := 0.0:                ## set by the clips; the idle blinks are made here
+	set(v):
+		if v != eyes_closed:
+			eyes_closed = v
+			for m in _mats:
+				m.set_shader_parameter("eyes_closed", v)
+var triangles := 0                     ## drawn a frame without the fur layers
+
+var _player: AnimationPlayer
+var _skin: MeshInstance3D
+var _fur: MeshInstance3D
+var _fur_source: ArrayMesh             ## the furry skin as built, one layer
+var _mats: Array[ShaderMaterial] = []
+var _skin_mat: ShaderMaterial
+var _traits := {}
+var _clip_scale := 1.0
+var _pending := ""
+var _pending_seconds := -1.0
+var _next_blink := 2.4
+var _blink_until := -1.0
+var _t := 0.0
+
+static var _noise: ImageTexture3D
+static var _stacks := {}               ## the stacked fur meshes, by source and layer count, shared by every creature
+
+
+func _ready() -> void:
+	_player = $AnimationPlayer
+	_skin = $Skeleton3D/Skin
+	_fur = $Skeleton3D/Fur
+	_skin_mat = _material(preload("res://creatures/shaders/skin.gdshader"))
+	_skin.set_surface_override_material(0, _skin_mat)
+	var halo := _material(preload("res://creatures/shaders/halo.gdshader"))
+	halo.render_priority = 1
+	_skin.set_surface_override_material(1, halo)
+	_fur_source = _fur.mesh
+	for mi in [_skin, _fur]:
+		for s in mi.mesh.get_surface_count():
+			triangles += mi.mesh.surface_get_array_index_len(s) / 3
+	if _noise == null:
+		_noise = _noise_texture()
+	var fm := _material(preload("res://creatures/shaders/fur.gdshader"))
+	fm.set_shader_parameter("noise", _noise)
+	_fur.material_override = fm
+	_fur.mesh = _layered(_fur_source, shells)
+	_player.animation_finished.connect(_on_finished)
+	if not _traits.is_empty():
+		set_traits(_traits)
+	play(_pending if _pending != "" else clip, _pending_seconds)
+	if random_start and clip == "idle":
+		_player.seek(randf() * _player.current_animation_length, true)
+
+
+func _material(shader: Shader) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = shader
+	m.set_shader_parameter("colour_fix", 1.0 if RenderingServer.get_current_rendering_method() == "gl_compatibility" else 0.0)
+	_mats.append(m)
+	return m
+
+
+static func _layered(src: ArrayMesh, layers: int) -> ArrayMesh:
+	## the furry skin and `layers` copies of it stacked in one mesh; each copy's height (0 the skin, 1 the tips) goes in
+	## CUSTOM2.w, which the fur shader lifts it by. Made once for each source and layer count.
+	var key := "%s#%d" % [src.resource_path if src.resource_path != "" else str(src.get_instance_id()), layers]
+	if _stacks.has(key):
+		return _stacks[key]
+	var a := src.surface_get_arrays(0)
+	if a.is_empty() or a[Mesh.ARRAY_VERTEX] == null:
+		return src                         # the engine kept no copy of the mesh: the skin alone, no fur
+	var nv: int = (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	var copies := layers + 1
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	for k in Mesh.ARRAY_MAX:
+		if a[k] == null or k == Mesh.ARRAY_INDEX or k == Mesh.ARRAY_CUSTOM2:
+			continue
+		var arr = a[k].duplicate()
+		for c in layers:
+			arr.append_array(a[k])
+		out[k] = arr
+	var c2: PackedFloat32Array = a[Mesh.ARRAY_CUSTOM2]
+	var c2_out := PackedFloat32Array()
+	var index: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+	var index_out := PackedInt32Array()
+	for c in copies:
+		var h := float(c) / layers if layers > 0 else 0.0
+		var part := c2.duplicate()
+		for i in nv:
+			part[i * 4 + 3] = h
+		c2_out.append_array(part)
+		var ip := index.duplicate()
+		for i in ip.size():
+			ip[i] += c * nv
+		index_out.append_array(ip)
+	out[Mesh.ARRAY_CUSTOM2] = c2_out
+	out[Mesh.ARRAY_INDEX] = index_out
+	var shapes := []
+	for b in src.surface_get_blend_shape_arrays(0):
+		var sb := []
+		sb.resize(Mesh.ARRAY_MAX)
+		for k in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT]:
+			if b[k] == null:
+				continue
+			var arr = b[k].duplicate()
+			for c in layers:
+				arr.append_array(b[k])
+			sb[k] = arr
+		shapes.append(sb)
+	var m := ArrayMesh.new()
+	m.blend_shape_mode = src.blend_shape_mode
+	for i in src.get_blend_shape_count():
+		m.add_blend_shape(src.get_blend_shape_name(i))
+	var flags := 0
+	for k in 3:
+		flags |= Mesh.ARRAY_CUSTOM_RGBA_FLOAT << (Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT + k * Mesh.ARRAY_FORMAT_CUSTOM_BITS)
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out, shapes, {}, flags)
+	_stacks[key] = m
+	return m
+
+
+func fur_triangles() -> int:
+	return _fur_source.surface_get_array_index_len(0) / 3 * shells if _fur_source else 0
+
+
+static func _noise_texture() -> ImageTexture3D:
+	## the fur's strand and tuft noise, made once and looked up instead of computed for every pixel of every layer: a
+	## tiling block of random values, red for strands and green for tufts (the texture's smoothing blends between them)
+	const N := 32
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var layers: Array[Image] = []
+	for z in N:
+		var d := PackedByteArray()
+		d.resize(N * N * 2)
+		for i in N * N * 2:
+			d[i] = rng.randi() & 255
+		layers.append(Image.create_from_data(N, N, false, Image.FORMAT_RG8, d))
+	var t := ImageTexture3D.new()
+	t.create(Image.FORMAT_RG8, N, N, N, false, layers)
+	return t
+
+
+func set_traits(t: Dictionary) -> void:
+	_traits = t.duplicate()                ## kept for _ready when set before the creature is in the scene
+	var c: Array = Traits.COATS.get(t.get("coat", "apricot"))
+	var g: Array = Traits.GLOWS.get(t.get("glow", "pink"))
+	for m in _mats:
+		m.set_shader_parameter("coat_hue", c[0] / 360.0)
+		m.set_shader_parameter("coat_sat", c[1])
+		m.set_shader_parameter("coat_val", c[2])
+		m.set_shader_parameter("glow_hue", g[0] / 360.0 if g[0] >= 0.0 else -1.0)
+		m.set_shader_parameter("glow_sat", g[1])
+
+
+# ------------------------------------------------------------------ clips
+func play(name: String, seconds := -1.0) -> void:
+	## seconds: the clip's length if not its usual one (a calm fox's happy wiggle is slower)
+	clip = name
+	if not _player:
+		_pending = name
+		_pending_seconds = seconds
+		return
+	var anim := name
+	if name == "turn" or name == "turn_stand":
+		anim = name + ("_r" if facing > 0 else "_l")
+	var a := _player.get_animation(anim)
+	_clip_scale = a.length / seconds if seconds > 0.0 else 1.0
+	_player.speed_scale = _clip_scale * speed
+	_player.play(anim)
+	_player.seek(0.0, true)
+	if name == "idle":
+		eyes_closed = 0.0
+
+
+func progress() -> float:
+	## how far through the clip, 0 to 1 (a loop's place in its cycle)
+	if not _player or _player.current_animation == "":
+		return 0.0
+	return clampf(_player.current_animation_position / _player.current_animation_length, 0.0, 1.0)
+
+
+func pose_weights() -> Vector4:
+	## sit, stand, lying down, curled up asleep: from the blend shapes
+	if not _skin:
+		return Vector4(1, 0, 0, 0)
+	var s := _skin.get_blend_shape_value(0)
+	var d := _skin.get_blend_shape_value(1)
+	var c := _skin.get_blend_shape_value(2)
+	return Vector4(maxf(0.0, 1.0 - s - d - c), s, d, c)
+
+
+func _on_finished(anim: StringName) -> void:
+	if not auto_next:
+		return                             # held on its last frame; the creature decides what comes next
+	var done := clip
+	if done.begins_with("turn"):
+		facing = -facing
+	play("sleep" if done == "liedown" else "idle")
+	clip_done.emit(done)
+
+
+func _process(delta: float) -> void:
+	_t += delta
+	var turn_deg: float = get_meta("turn_deg", 100.0)
+	rotation.y = 0.0 if facing > 0 else -deg_to_rad(turn_deg)
+	if clip == "idle":
+		if _t > _next_blink:
+			_blink_until = _t + 0.14
+			_next_blink = _t + randf_range(2.5, 5.0)
+		eyes_closed = 1.0 if _t < _blink_until else 0.0

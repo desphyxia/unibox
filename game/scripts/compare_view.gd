@@ -1,6 +1,7 @@
 class_name CompareView
 extends CanvasLayer
-## The 3D fox check, from the parent area: the live fox (live_fox.gd) alone over the meadow, as big as in the game.
+## The 3D fox check, from the parent area: the live fox (creatures/fox/fox.scn) alone over the meadow, as big as in the
+## game.
 ## Buttons: every clip, close-up, spin (or drag the fox to turn it), fur layers, colours, speed test, back. The corner
 ## shows frames per second, so it can be judged on an iPad or iPhone.
 ## Speed test runs through set-ups one after another (no 3D, fur on and off, edge smoothing, the 3D drawn over the whole
@@ -18,10 +19,10 @@ var box := SubViewportContainer.new()
 var view := SubViewport.new()
 var cam := Camera3D.new()
 var fit_view := true                     ## the 3D box only round the foxes (false: the whole screen)
-var crowd: Array[Node3D] = []            ## extra live foxes for the speed test (holders, each with a LiveFox)
+var crowd: Array[Node3D] = []            ## extra live foxes for the speed test (holders, each with a fox)
 ## where they stand (screen fractions) and their size: the second adult and three babies
 const CROWD := [[0.2, 0.68, 1.0], [0.82, 0.66, 0.68], [0.28, 0.93, 0.68], [0.74, 0.94, 0.68]]
-var fox: LiveFox
+var fox: CreatureModel
 var spin := Node3D.new()                 ## the drag turns this; the fox's own turns happen inside it
 var _zoom := 1.0
 var _turn := 0.0                         ## the live fox's own turn, radians
@@ -66,9 +67,9 @@ func _ready() -> void:
 
 
 func _build_3d() -> void:
-	FoxView._build_world(view, cam)
+	fox = FoxView.FOX.instantiate()
+	FoxView._build_world(view, cam, fox.get_meta("camera"))
 	view.add_child(spin)
-	fox = LiveFox.new()
 	spin.add_child(fox)
 
 
@@ -125,7 +126,7 @@ func _build_ui() -> void:
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root.add_child(l)
 	_fps.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var mb := FileAccess.get_file_as_bytes(LiveFox.DATA + ".bin").size() / 1.0e6
+	var mb := FileAccess.get_file_as_bytes(FoxView.FOX.resource_path).size() / 1.0e6
 	_cap.text = "The live 3D fox, as in the meadow\nevery clip computed live, model about %.1f MB" % mb
 
 
@@ -139,8 +140,8 @@ func _set_shells(n: int) -> void:
 	_layers_btn.text = _layers_text()
 
 
-func _live_foxes() -> Array[LiveFox]:
-	var out: Array[LiveFox] = [fox]
+func _live_foxes() -> Array[CreatureModel]:
+	var out: Array[CreatureModel] = [fox]
 	for h in crowd:
 		out.append(h.get_child(0))
 	return out
@@ -155,7 +156,7 @@ func _layout() -> void:
 	var v := root.get_viewport_rect().size
 	var ground := Vector2(0, v.y * 0.8)
 	var ppu := PPU * _zoom
-	var g: Array = fox.meta["ground"]
+	var g: Array = fox.get_meta("ground")
 	var tgt := cam.global_position + (-cam.global_transform.basis.z) * 40.0
 	var gp := Vector3(g[0], g[1], g[2])
 	var rel := cam.global_transform.basis.inverse() * (gp - tgt)   # where the ground point sits in the camera's plane
@@ -165,7 +166,7 @@ func _layout() -> void:
 	var spots := [[want, 1.0]]
 	var right := cam.global_transform.basis.x
 	var toward := Vector3(cam.global_transform.basis.z.x, 0.0, cam.global_transform.basis.z.z).normalized()
-	var down := sin(deg_to_rad(float(fox.meta["camera"]["pitch"])))
+	var down := sin(deg_to_rad(float(fox.get_meta("camera")["pitch"])))
 	for i in crowd.size():
 		var c: Array = CROWD[i]
 		var at := Vector2(v.x * c[0], v.y * c[1])
@@ -302,7 +303,7 @@ func _setup(t: Array) -> void:
 
 func _add_crowd_fox() -> void:
 	var h := Node3D.new()
-	var f := LiveFox.new()
+	var f: CreatureModel = FoxView.FOX.instantiate()
 	f.shells = fox.shells
 	h.add_child(f)
 	view.add_child(h)
