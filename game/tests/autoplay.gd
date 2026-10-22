@@ -191,6 +191,32 @@ func _ready() -> void:
 	await shot("baby")
 	await wait(6.0)
 	await shot("family")
+	# name the second adult and the baby through their tags (the gate, then the name field)
+	var partner: Creature = main.breeding.partner
+	var baby: Creature = main.creatures[main.creatures.size() - 1]
+	await tap(w(partner.tag.position))
+	await wait(0.4)
+	await shot("partner-gate")
+	main.ui._close()
+	main.ui.open_name_only(partner)
+	main.ui._name_edit.text = "Bramble"
+	main.ui._save_name()
+	main.ui.open_name_only(baby)
+	await wait(0.3)
+	await shot("baby-name-field")
+	main.ui._name_edit.text = "Pebble"
+	main.ui._save_name()
+	await wait(0.4)
+	print("NAMES ", Game.creature_name, ",", partner.pet_name, ",", baby.pet_name)
+	await shot("named-family")
+	# the baby grows up: halfway, then grown (its growing time run on)
+	baby.grow_age = baby.grow_seconds * 0.49
+	await wait(0.5)
+	await shot("baby-young")
+	baby.grow_age = baby.grow_seconds * 0.995
+	await wait(1.0)
+	print("GROWN ", baby.stage(), " scale %.3f of %.3f, voice %.2f, fur %d" % [baby.base_scale, main.CREATURE_SCALE, baby.voice, baby.look.model.shells])
+	await shot("baby-grown")
 	# the comparison: rendered fox and live 3D fox
 	main.open_compare()
 	await wait(1.5)

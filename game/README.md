@@ -24,6 +24,11 @@ meadow (see "Live 3D foxes" below).
   button on a parent's side gives the baby that parent's colour, and the baby changes at once. The big tick closes
   it; tap or rub the egg to hatch a small baby fox in those colours, which keeps close to your fox. The nest glows
   again 40 seconds later, up to three babies. A tap on the meadow calls whichever fox was touched last.
+- **Babies grow up:** over about three minutes of island time (faster with the demo speed) a baby grows to an adult's
+  size; halfway and when grown it stretches up with sparkles and a chirp, its voice gets lower, and grown it gets an
+  adult's fur.
+- **Every creature has a name tag:** the second adult and each baby get their own paw tag; tapping one opens the
+  parental gate, then a name field for that creature. Tags over creatures standing close together stack up.
 
 Variant A (visible needs): about a minute after hatching, the fox looks at the tree and sighs, and the apples
 bounce and glow. It repeats every 22 seconds until the fox is fed, then comes back after 150 seconds. Nothing bad

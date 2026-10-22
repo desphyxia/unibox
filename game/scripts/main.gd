@@ -168,11 +168,12 @@ func _new_session() -> void:
 
 
 # ------------------------------------------------------------------ hatching and the creature
-func spawn_creature(traits: Dictionary, size: float, at: Vector2, temper: String, face := 1.0) -> Creature:
+func spawn_creature(traits: Dictionary, size: float, at: Vector2, temper: String, face := 1.0, grows_to := -1.0) -> Creature:
+	## size, grows_to: times an adult's size (grows_to: the size it will grow to, so its picture is made for that)
 	var c := Creature.new()
 	c.meadow = self
 	c.facing = face
-	c.setup(temper, CREATURE_SCALE * size)
+	c.setup(temper, CREATURE_SCALE * size, CREATURE_SCALE * grows_to)
 	c.set_traits(traits)
 	c.position = at
 	world.add_child(c)
@@ -204,14 +205,21 @@ func _on_hatched(at: Vector2) -> void:
 	_selected = creature
 	creature.appear(at + Vector2(0, 24))
 	breeding.start()
-	tag = NameTag.new()
-	tag.follow = creature
-	overlay.add_child(tag)
-	tag.position = creature.position + Vector2(0, -200)
+	tag = add_tag(creature)
 	tag.set_text(Game.creature_name)
-	tag.pressed.connect(func():
-		Log.event("name_tag_opened")
-		ui.gate(ui.open_name_only))
+
+
+func add_tag(c: Creature) -> NameTag:
+	## a paw tag over a creature; tapping it opens the parental gate, then a name field for that creature
+	var t := NameTag.new()
+	t.follow = c
+	c.tag = t
+	overlay.add_child(t)
+	t.position = c.position + Vector2(0, -200)
+	t.pressed.connect(func():
+		Log.event("name_tag_opened", c.who)
+		ui.gate(func(): ui.open_name_only(null if c == creature else c)))
+	return t
 
 
 func tree_position() -> Vector2:

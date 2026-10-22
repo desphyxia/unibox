@@ -11,6 +11,7 @@ const AGAIN_AFTER := 40.0              ## after a baby hatches, the nest glows a
 const MAX_BABIES := 3
 const PAIR_DISTANCE := 240.0
 const BABY_SCALE := 0.68               ## times the adults' size
+const GROW_SECONDS := 180.0            ## a baby grows to an adult's size over this much island time
 
 enum State { NONE, WAITING, ARRIVING, READY, PAIRING, PICKING, EGG, RESTING, DONE }
 
@@ -62,6 +63,8 @@ func _arrive() -> void:
 	var t := Traits.other_than(main.creature.traits)
 	partner = main.spawn_creature(t, 1.0, Vector2(main.BASE.x + 220, home().y + 10), "calm", -1.0)
 	partner.shows_needs = false
+	partner.who = "second"
+	main.add_tag(partner)
 	partner.home = home()
 	partner.voice = 0.92
 	partner.walk_to(home(), 0.85)
@@ -154,13 +157,16 @@ func _on_traits_chosen(t: Dictionary, _sources: Dictionary) -> void:
 
 
 func _on_baby_hatched(at: Vector2) -> void:
-	var baby: Creature = main.spawn_creature(_baby_traits, BABY_SCALE, at + Vector2(0, 24), main.creature.temperament, 1.0)
+	var baby: Creature = main.spawn_creature(_baby_traits, BABY_SCALE, at + Vector2(0, 24), main.creature.temperament, 1.0, 1.0)
 	baby.follow = main.creature
 	baby.voice = 1.38
 	baby.shows_needs = false
 	baby.appear(at + Vector2(0, 24), Vector2(-110 if main.creature.position.x < at.x else 110, 60))
 	baby._next_wander = 2.0
 	babies += 1
+	baby.who = "baby%d" % babies
+	baby.grow_up(main.CREATURE_SCALE, GROW_SECONDS)
+	main.add_tag(baby)
 	Log.event("egg_hatch_second", "%s,%s" % [_baby_traits["coat"], _baby_traits["glow"]])
 	_egg = null
 	main.creature.home = null
