@@ -122,7 +122,7 @@ func _ready() -> void:
 	print("WORN after ", c.worn)
 	await shot("bow-off")
 	# the pond: the signpost sends it along the path, and the view follows
-	await tap(w(Vector2(944, 520)))
+	await tap(w(Vector2(944, 444)))
 	await until(func(): return main.area == "pond" and c.target == null and Creature.area_at(c.position.x) == "pond", 15.0)
 	await wait(1.4)
 	print("POND area=", main.area, " fox at ", c.position)
@@ -165,7 +165,7 @@ func _ready() -> void:
 	await until(func(): return not c.busy, 8.0)
 	await tap(w(Vector2(1500, 700)))
 	await until(func(): return c.target == null and not c.busy, 8.0)
-	await tap(w(Vector2(1104, 550)))
+	await tap(w(Vector2(1104, 476)))                 # the top of the board, above anything on the grass
 	await until(func(): return main.area == "meadow" and c.target == null and Creature.area_at(c.position.x) == "meadow", 15.0)
 	await wait(1.4)
 	await shot("back-to-meadow")
@@ -207,6 +207,7 @@ func _ready() -> void:
 	await shot("sky-switching")
 	await wait(1.6)
 	await shot("night")
+	print("MUSIC night: day %.1f dB, night %.1f dB" % [main.music._day.volume_db, main.music._night.volume_db])
 	await wait(1.5)
 	await shot("asleep")
 	await tap(w(c.position + Vector2(0, -40)))
@@ -217,6 +218,7 @@ func _ready() -> void:
 	await tap(main.sky.position + main.sky.size / 2.0)
 	await wait(3.0)
 	await shot("morning")
+	print("MUSIC morning: day %.1f dB, night %.1f dB, playing %s" % [main.music._day.volume_db, main.music._night.volume_db, main.music._day.playing])
 	# turn back to the right, standing
 	await tap(w(Vector2(850, 640)))
 	for k in 4:

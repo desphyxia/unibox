@@ -11,6 +11,7 @@ var variant := "A"            ## "A": visible needs (cues), "B": no visible need
 var kind := "fox"             ## the kind of creature that hatches: "fox" or "unicorn" (creatures/<kind>/)
 var temperament := "playful"
 var creature_name := ""
+var music := true             ## the background music (the parent area can turn it off)
 
 
 func _ready() -> void:
@@ -20,6 +21,7 @@ func _ready() -> void:
 		kind = cfg.get_value("session", "kind", kind)
 		temperament = cfg.get_value("session", "temperament", temperament)
 		creature_name = cfg.get_value("creature", "name", "")
+		music = cfg.get_value("session", "music", music)
 
 
 func save() -> void:
@@ -27,6 +29,7 @@ func save() -> void:
 	cfg.set_value("session", "variant", variant)
 	cfg.set_value("session", "kind", kind)
 	cfg.set_value("session", "temperament", temperament)
+	cfg.set_value("session", "music", music)
 	cfg.set_value("creature", "name", creature_name)
 	cfg.save(SAVE_PATH)
 
