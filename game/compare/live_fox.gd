@@ -1,23 +1,23 @@
 class_name LiveFox
 extends Node3D
-## The fox as a live 3D model (the comparison with the rendered sprites): the mesh exported by
-## art/generators/fox_live_export.py in four poses, shell fur grown from the strand formulas, and every clip the game
-## has, computed each frame from the same curves the renders use (FoxRig, WalkRig and ReactRig in fox3d.py) instead of
-## played from pictures. Its colours take the same traits as the sprites.
+## The fox as a live 3D model, as the game draws it (scripts/fox_view.gd puts one in the meadow): the mesh exported by
+## art/generators/fox_live_export.py in four poses, shell fur grown from the strand formulas, and every clip computed
+## each frame from the same curves the Blender renders used (FoxRig, WalkRig and ReactRig in fox3d.py). Its colours
+## take the traits. The model is loaded once and shared by every fox; each fox has its own materials.
 ##   idle, walk (in place), eat, happy, hunger, liedown (sit -> sphinx -> curled), sleep, wake (lying down backward),
-##   turn (a whole turn on the spot; the fox then faces the other way)
+##   turn and turn_stand (half way round on the spot, sitting or standing; the fox then faces the other way)
 
 signal clip_done(name: String)
 
 const DATA := "res://compare/fox_live"
 const CLIPS := {                      ## seconds, from the rendered clips' frames and the game's playback rates
 	"idle": 2.0, "walk": 1.0, "eat": 16.0 / 12.0, "happy": 16.0 / 14.0, "hunger": 20.0 / 12.0, "liedown": 20.0 / 12.0,
-	"sleep": 16.0 / 12.0, "wake": 20.0 / 15.0, "turn": 13.0 / 22.0,
+	"sleep": 16.0 / 12.0, "wake": 20.0 / 15.0, "turn": 13.0 / 22.0, "turn_stand": 13.0 / 28.0,
 }
 const LOOPING := ["idle", "walk", "sleep"]
 const TURN_DEG := 100.0               ## the renders' left-facing view is the fox turned this far (fox3d.TURN_DEG)
 
-var shells := 8:
+var shells := 6:
 	set(v):
 		shells = v
 		if _fur:
@@ -26,58 +26,78 @@ var meta := {}
 var rig := {}
 var clip := "idle"
 var facing := 1.0                     ## 1 as rendered, -1 turned round (the left-facing view)
+var speed := 1.0                      ## how fast the clip plays (the walk keeps pace with the ground this way)
+var auto_next := true                 ## after a one-shot clip: idle (or sleep after lying down); off when a creature leads
 var triangles := 0                    ## drawn per frame without the fur layers
+var _dur := 2.0                       ## the clip's length in seconds (idle's to start)
+var _traits := {}
 var _mats: Array[ShaderMaterial] = []
 var _fur: MultiMeshInstance3D
-var _fur_mesh: ArrayMesh
 var _t := 0.0
 var _idle_t := 0.0
 var _next_blink := 2.4
 var _blink_until := -1.0
 
+## the model, shared by every live fox: loaded once
+static var _shared := {}
 
-func _ready() -> void:
-	meta = JSON.parse_string(FileAccess.get_file_as_string(DATA + ".json"))
+
+static func shared() -> Dictionary:
+	if not _shared.is_empty():
+		return _shared
+	var m: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(DATA + ".json"))
 	var blob := FileAccess.get_file_as_bytes(DATA + ".bin")
-	rig = meta["rig"]
-	var tx: Dictionary = meta["tex"]
+	var tx: Dictionary = m["tex"]
 	var img := Image.create_from_data(int(tx["width"]), int(tx["height"]), false, Image.FORMAT_RGBAF,
 		blob.slice(int(tx["offset"]), int(tx["offset"]) + int(tx["width"]) * int(tx["height"]) * 16))
-	var tex := ImageTexture.create_from_image(img)
-	var shader := preload("res://compare/fox_live.gdshader")
-	var kinds := {"lit": 0, "gloss": 1, "emit": 2}
-	for cls in meta["groups"]:
-		var gi: Dictionary = meta["groups"][cls]
-		var arrays := _arrays(blob, gi)
-		var mesh := ArrayMesh.new()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, _custom_flags())
+	# the skin, eyes, ribbon and foxfire are one mesh (one draw); which surface each vertex is goes in CUSTOM1.w
+	var parts := []
+	var tris := 0
+	var fur_src := []
+	for cls in ["lit", "gloss", "emit"]:
+		var a := _arrays(blob, m["groups"][cls], {"lit": 0.0, "gloss": 1.0, "emit": 2.0}[cls])
+		parts.append(a)
+		tris += int(m["groups"][cls]["tris"])
+		if cls == "lit":
+			fur_src = a
+	var skin := ArrayMesh.new()
+	skin.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _join(parts), [], {}, _custom_flags())
+	var halo := ArrayMesh.new()
+	halo.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _arrays(blob, m["groups"]["halo"], 0.0), [], {}, _custom_flags())
+	tris += int(m["groups"]["halo"]["tris"])
+	_shared = {"meta": m, "tex": ImageTexture.create_from_image(img), "skin": skin, "halo": halo,
+		"fur": _furry_part(fur_src), "tris": tris, "noise": _noise_texture(),
+		"web": RenderingServer.get_current_rendering_method() == "gl_compatibility"}
+	return _shared
+
+
+func _ready() -> void:
+	var sh := shared()
+	meta = sh["meta"]
+	rig = meta["rig"]
+	triangles = sh["tris"]
+	for part in [["skin", preload("res://compare/fox_live.gdshader"), 0], ["halo", preload("res://compare/fox_halo.gdshader"), 1]]:
 		var m := ShaderMaterial.new()
-		if cls == "halo":
-			m.shader = preload("res://compare/fox_halo.gdshader")
-			m.render_priority = 1
-		else:
-			m.shader = shader
-			m.set_shader_parameter("surface", kinds[cls])
-		mesh.surface_set_material(0, m)
+		m.shader = part[1]
+		m.render_priority = part[2]
 		_mats.append(m)
 		var mi := MeshInstance3D.new()
-		mi.mesh = mesh
+		mi.mesh = sh[part[0]]
+		mi.material_override = m
 		mi.custom_aabb = AABB(Vector3(-8, -2, -8), Vector3(16, 12, 16))   ## it moves well outside its sitting shape
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
-		triangles += int(gi["tris"])
-		if cls == "lit":
-			_fur_mesh = _furry_part(arrays)
 	var fm := ShaderMaterial.new()
 	fm.shader = preload("res://compare/fox_fur.gdshader")
-	_fur_mesh.surface_set_material(0, fm)
+	fm.set_shader_parameter("noise", sh["noise"])
 	_mats.append(fm)
 	_fur = MultiMeshInstance3D.new()
+	_fur.material_override = fm
 	_fur.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_fur.custom_aabb = AABB(Vector3(-8, -2, -8), Vector3(16, 12, 16))
 	add_child(_fur)
 	_build_shells()
-	var web_renderer := RenderingServer.get_current_rendering_method() == "gl_compatibility"
+	var tx: Dictionary = meta["tex"]
 	var walk: Dictionary = rig["walk"]
 	var pivots := PackedVector3Array()
 	var knees := PackedVector3Array()
@@ -87,25 +107,27 @@ func _ready() -> void:
 		knees.append(_v(walk["legs"][i]["knee"]))
 		kt[i] = walk["legs"][i]["kt"]
 	for m in _mats:
-		m.set_shader_parameter("pose_tex", tex)
+		m.set_shader_parameter("pose_tex", sh["tex"])
 		m.set_shader_parameter("tex_row", int(tx["row"]))
 		m.set_shader_parameter("per_vertex", int(tx["per_vertex"]))
-		m.set_shader_parameter("colour_fix", 1.0 if web_renderer else 0.0)
+		m.set_shader_parameter("colour_fix", 1.0 if sh["web"] else 0.0)
 		m.set_shader_parameter("leg_pivot", pivots)
 		m.set_shader_parameter("leg_knee", knees)
 		m.set_shader_parameter("leg_kt", kt)
 		m.set_shader_parameter("ground_y", float(walk["ground"][1]))
+	if not _traits.is_empty():
+		set_traits(_traits)
 	_apply(0.0)
 
 
-func _custom_flags() -> int:
+static func _custom_flags() -> int:
 	var f := 0
 	for k in 2:
 		f |= Mesh.ARRAY_CUSTOM_RGBA_FLOAT << (Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT + k * Mesh.ARRAY_FORMAT_CUSTOM_BITS)
 	return f
 
 
-func _arrays(blob: PackedByteArray, gi: Dictionary) -> Array:
+static func _arrays(blob: PackedByteArray, gi: Dictionary, surface: float) -> Array:
 	var n: int = gi["verts"]
 	var stride: int = gi["stride"]
 	var v := blob.slice(gi["vert_offset"], gi["vert_offset"] + n * stride * 4).to_float32_array()
@@ -128,6 +150,7 @@ func _arrays(blob: PackedByteArray, gi: Dictionary) -> Array:
 		for k in 4:
 			c0[i * 4 + k] = v[o + 10 + k]
 			c1[i * 4 + k] = v[o + 14 + k]
+		c1[i * 4 + 3] = surface
 	var a := []
 	a.resize(Mesh.ARRAY_MAX)
 	a[Mesh.ARRAY_VERTEX] = pos
@@ -139,7 +162,34 @@ func _arrays(blob: PackedByteArray, gi: Dictionary) -> Array:
 	return a
 
 
-func _furry_part(a: Array) -> ArrayMesh:
+static func _join(parts: Array) -> Array:
+	var out := []
+	out.resize(Mesh.ARRAY_MAX)
+	var pos := PackedVector3Array()
+	var nrm := PackedVector3Array()
+	var col := PackedColorArray()
+	var c0 := PackedFloat32Array()
+	var c1 := PackedFloat32Array()
+	var ind := PackedInt32Array()
+	for a in parts:
+		var base := pos.size()
+		pos.append_array(a[Mesh.ARRAY_VERTEX])
+		nrm.append_array(a[Mesh.ARRAY_NORMAL])
+		col.append_array(a[Mesh.ARRAY_COLOR])
+		c0.append_array(a[Mesh.ARRAY_CUSTOM0])
+		c1.append_array(a[Mesh.ARRAY_CUSTOM1])
+		for i in a[Mesh.ARRAY_INDEX]:
+			ind.append(i + base)
+	out[Mesh.ARRAY_VERTEX] = pos
+	out[Mesh.ARRAY_NORMAL] = nrm
+	out[Mesh.ARRAY_COLOR] = col
+	out[Mesh.ARRAY_CUSTOM0] = c0
+	out[Mesh.ARRAY_CUSTOM1] = c1
+	out[Mesh.ARRAY_INDEX] = ind
+	return out
+
+
+static func _furry_part(a: Array) -> ArrayMesh:
 	## only the triangles that grow fur get the layers (the fur length is in the pose texture; the body, head, ears and
 	## tails are the furry parts, minus the face, which the shader leaves bare)
 	var c0: PackedFloat32Array = a[Mesh.ARRAY_CUSTOM0]
@@ -158,12 +208,31 @@ func _furry_part(a: Array) -> ArrayMesh:
 	return m
 
 
+static func _noise_texture() -> ImageTexture3D:
+	## the fur's strand and tuft noise, made once and looked up instead of computed for every pixel of every layer: a
+	## tiling block of random values, red for strands and green for tufts (the texture's smoothing blends between them)
+	const N := 32
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var layers: Array[Image] = []
+	for z in N:
+		var d := PackedByteArray()
+		d.resize(N * N * 2)
+		for i in N * N * 2:
+			d[i] = rng.randi() & 255
+		layers.append(Image.create_from_data(N, N, false, Image.FORMAT_RG8, d))
+	var t := ImageTexture3D.new()
+	t.create(Image.FORMAT_RG8, N, N, N, false, layers)
+	return t
+
+
 func _build_shells() -> void:
+	_fur.visible = shells > 0
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
 	mm.use_colors = true                    ## white: the web renderer multiplies by an unset (black) instance colour otherwise
-	mm.mesh = _fur_mesh
+	mm.mesh = shared()["fur"]
 	mm.instance_count = shells
 	for i in shells:
 		mm.set_instance_transform(i, Transform3D.IDENTITY)
@@ -173,14 +242,16 @@ func _build_shells() -> void:
 
 
 func fur_triangles() -> int:
-	return _fur_mesh.surface_get_array_index_len(0) / 3 * shells
+	var fm: ArrayMesh = shared()["fur"]
+	return fm.surface_get_array_index_len(0) / 3 * shells
 
 
-func _v(a) -> Vector3:
+static func _v(a) -> Vector3:
 	return Vector3(a[0], a[1], a[2])
 
 
 func set_traits(t: Dictionary) -> void:
+	_traits = t.duplicate()                ## kept for _ready when set before the fox is in the scene
 	var c: Array = Traits.COATS.get(t.get("coat", "apricot"))
 	var g: Array = Traits.GLOWS.get(t.get("glow", "pink"))
 	for m in _mats:
@@ -192,18 +263,29 @@ func set_traits(t: Dictionary) -> void:
 
 
 # ------------------------------------------------------------------ clips
-func play(name: String) -> void:
+func play(name: String, seconds := -1.0) -> void:
+	## seconds: the clip's length if not its usual one (a calm fox's happy wiggle is slower)
 	clip = name
 	_t = 0.0
+	_dur = seconds if seconds > 0.0 else float(CLIPS[name])
+
+
+func progress() -> float:
+	## how far through the clip, 0 to 1 (a loop's place in its cycle)
+	return fmod(_t, _dur) / _dur if LOOPING.has(clip) else clampf(_t / _dur, 0.0, 1.0)
+
+
+func pose_weights() -> Vector4:
+	## sit, stand, lying down, curled up asleep
+	return _pose_weights(progress())
 
 
 func _process(delta: float) -> void:
-	_t += delta
+	_t += delta * speed
 	_idle_t += delta
-	var dur: float = CLIPS[clip]
-	if _t >= dur and not LOOPING.has(clip):
+	if auto_next and _t >= _dur and not LOOPING.has(clip):
 		var done := clip
-		if done == "turn":
+		if done.begins_with("turn"):
 			facing = -facing
 		play("sleep" if done == "liedown" else "idle")
 		clip_done.emit(done)
@@ -256,7 +338,7 @@ func _params(u: float) -> Dictionary:
 			var v := u if clip == "liedown" else 1.0 - u
 			p.merge({"pitch": d.call(7) * _win(v, 0.0, 0.12, 0.24, 0.4), "ear": d.call(-10) * _win(v, 0.1, 0.4, 0.72, 1.0),
 				"sway": 1.0 - 0.7 * _ss(0.0, 1.0, v), "closed": v >= 0.62}, true)
-		"turn":
+		"turn", "turn_stand":
 			var e := u * u * u * (u * (6.0 * u - 15.0) + 10.0)
 			var sg := facing
 			var mid := pow(sin(PI * u), 2.0)
@@ -268,7 +350,7 @@ func _params(u: float) -> Dictionary:
 func _pose_weights(u: float) -> Vector4:
 	## sit, stand, down, sleep
 	match clip:
-		"walk":
+		"walk", "turn_stand":
 			return Vector4(0, 1, 0, 0)
 		"sleep":
 			return Vector4(0, 0, 0, 1)
@@ -290,9 +372,7 @@ func _blend(key: String, w: Vector4, f: Callable) -> Vector3:
 
 
 func _apply(_delta: float) -> void:
-	var dur: float = CLIPS[clip]
-	var looping := LOOPING.has(clip)
-	var u := fmod(_t, dur) / dur if looping else clampf(_t / dur, 0.0, 1.0)
+	var u := progress()
 	var c := _params(u)
 	var w := _pose_weights(u)
 	# the idle phase: the idle loop's own cycle while idle, one cycle over eat/happy/hunger/sleep, held for the others
@@ -340,40 +420,28 @@ func _apply(_delta: float) -> void:
 			var s := (q - st) / (1.0 - st)
 			th[i] = A - 2.0 * A * (0.5 - 0.5 * cos(PI * s))
 			be[i] = float(L["bend"]) * sin(PI * s)
+	# every value once, then into each material
+	var hb := head * sway
+	var par := {"pose_w": w, "head_x": hb.x, "head_y": hb.y, "head_z": hb.z, "pivot": pivot,
+		"breath": 0.028 * sin(ph) * k + float(c["breath"]), "lift": lift, "ear_a0": ear0, "ear_a1": ear1,
+		"phase": ph, "wag": c["wag"], "wag_cycles": c["wag_cycles"], "clip_u": u, "tail_turn": c["tail_turn"],
+		"eyes_closed": 1.0 if closed else 0.0, "walk_w": w.y if clip == "walk" else 0.0, "leg_th": th, "leg_be": be,
+		"bob": bob}
+	for e in 2:
+		par["ear_b%d" % e] = _blend("", w, func(r): return _v(r["ears"][e]["base"]))
+		par["ear_ax%d" % e] = _blend("", w, func(r): return _v(r["ears"][e]["axis"])).normalized()
+	var amp := Vector3.ZERO
+	for ti in 3:
+		par["tail_r%d" % ti] = _blend("", w, func(r): return _v(r["tails"][ti]["root"]))
+		amp[ti] = float(rig["sit"]["tails"][ti]["amp"]) * k
+	par["tail_amp"] = amp
+	for f in 3:
+		par["fire_b%d" % f] = _blend("", w, func(r): return _v(r["fires"][f]) if f < r["fires"].size() else _v(rig["sit"]["fires"][f]))
+		var fl := Vector3(0.05 * sin(ph * 2.0 + 1.7 * f), 0.09 * sin(ph + 2.1 * f), 0.0)
+		par["fire_m%d" % f] = Vector4(fl.x, fl.y, fl.z, 1.0 + 0.06 * sin(3.0 * ph + f))
 	for m in _mats:
-		m.set_shader_parameter("pose_w", w)
-		var hb := head * sway
-		m.set_shader_parameter("head_x", hb.x)
-		m.set_shader_parameter("head_y", hb.y)
-		m.set_shader_parameter("head_z", hb.z)
-		m.set_shader_parameter("pivot", pivot)
-		m.set_shader_parameter("breath", 0.028 * sin(ph) * k + float(c["breath"]))
-		m.set_shader_parameter("lift", lift)
-		for e in 2:
-			m.set_shader_parameter("ear_b%d" % e, _blend("", w, func(r): return _v(r["ears"][e]["base"])))
-			m.set_shader_parameter("ear_ax%d" % e, _blend("", w, func(r): return _v(r["ears"][e]["axis"])).normalized())
-		m.set_shader_parameter("ear_a0", ear0)
-		m.set_shader_parameter("ear_a1", ear1)
-		var amp := Vector3.ZERO
-		for ti in 3:
-			m.set_shader_parameter("tail_r%d" % ti, _blend("", w, func(r): return _v(r["tails"][ti]["root"])))
-			amp[ti] = float(rig["sit"]["tails"][ti]["amp"]) * k
-		m.set_shader_parameter("tail_amp", amp)
-		m.set_shader_parameter("phase", ph)
-		m.set_shader_parameter("wag", c["wag"])
-		m.set_shader_parameter("wag_cycles", c["wag_cycles"])
-		m.set_shader_parameter("clip_u", u)
-		m.set_shader_parameter("tail_turn", c["tail_turn"])
-		for f in 3:
-			var base := _blend("", w, func(r): return _v(r["fires"][f]) if f < r["fires"].size() else _v(rig["sit"]["fires"][f]))
-			m.set_shader_parameter("fire_b%d" % f, base)
-			var fl := Vector3(0.05 * sin(ph * 2.0 + 1.7 * f), 0.09 * sin(ph + 2.1 * f), 0.0)
-			m.set_shader_parameter("fire_m%d" % f, Vector4(fl.x, fl.y, fl.z, 1.0 + 0.06 * sin(3.0 * ph + f)))
-		m.set_shader_parameter("eyes_closed", 1.0 if closed else 0.0)
-		m.set_shader_parameter("walk_w", w.y if clip == "walk" else 0.0)
-		m.set_shader_parameter("leg_th", th)
-		m.set_shader_parameter("leg_be", be)
-		m.set_shader_parameter("bob", bob)
+		for key in par:
+			m.set_shader_parameter(key, par[key])
 	# the whole fox turns about its ground point; facing round is the renders' left view
 	var base_turn := 0.0 if facing > 0 else -deg_to_rad(TURN_DEG)
 	rotation.y = base_turn + float(c["turn"])

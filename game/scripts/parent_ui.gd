@@ -245,7 +245,7 @@ func open_panel() -> void:
 		Log.event("setting", "second_fox=now")
 		second_fox_requested.emit())
 	sf.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_button(box, "Compare: rendered fox and live 3D fox", func():
+	_button(box, "3D fox check and speed test", func():
 		_close()
 		compare_requested.emit())
 	var r4 := _row(box)

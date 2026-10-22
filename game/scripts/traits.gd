@@ -1,9 +1,9 @@
 class_name Traits
 ## The traits a creature can inherit, in the first session two of them: coat colour and glow colour (tail tips and
-## foxfire). Both are made by recolouring the rendered frames in the game (shaders/fur_colour.gdshader), so a new
-## colour costs no download. A baby takes each trait from one of its parents, as the child chooses.
+## foxfire). Both are made by the live fox's shaders recolouring its model's colours (trait_colour in
+## compare/fox_rig.gdshaderinc), so a new colour costs no download. A baby takes each trait from one of its parents,
+## as the child chooses.
 
-const SHADER := preload("res://shaders/fur_colour.gdshader")
 const BASE_COAT := Color("ffa877")             ## the rendered apricot, the mid tone of the coat
 const BASE_GLOW := Color("f2a0e6")
 
@@ -28,19 +28,6 @@ const GLOWS := {
 }
 const TYPES := ["coat", "glow"]
 const DEFAULT := {"coat": "apricot", "glow": "pink"}
-
-
-static func material(t: Dictionary) -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	m.shader = SHADER
-	var c: Array = COATS.get(t.get("coat", "apricot"), COATS["apricot"])
-	m.set_shader_parameter("coat_hue", c[0] / 360.0)
-	m.set_shader_parameter("coat_sat", c[1])
-	m.set_shader_parameter("coat_val", c[2])
-	var g: Array = GLOWS.get(t.get("glow", "pink"), GLOWS["pink"])
-	m.set_shader_parameter("glow_hue", g[0] / 360.0 if g[0] >= 0.0 else -1.0)
-	m.set_shader_parameter("glow_sat", g[1])
-	return m
 
 
 static func swatch(type: String, value: String) -> Color:

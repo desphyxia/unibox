@@ -1,11 +1,12 @@
 shader_type spatial;
-// The live fox's skin, eyes, ribbon and foxfire. `surface`: 0 lit (vertex colour), 1 glossy, 2 glowing.
+// The live fox's skin, eyes, ribbon and foxfire, in one draw. Each vertex says which surface it is (CUSTOM1.w): 0 lit
+// (vertex colour), 1 glossy, 2 glowing. The trait colours are worked out per vertex, not per pixel.
 render_mode diffuse_lambert_wrap, specular_schlick_ggx, cull_disabled;   // some decals face inward, as in Blender
 #include "res://compare/fox_rig.gdshaderinc"
 
-uniform int surface = 0;              // 0 lit, 1 glossy, 2 glowing (not "kind": the rig has a local of that name)
-
 varying float emit;
+varying float surf;
+varying vec3 col;
 
 void vertex() {
 	int id = int(CUSTOM1.z + 0.5);
@@ -17,16 +18,18 @@ void vertex() {
 	NORMAL = normalize(q - p);
 	VERTEX = rig_hidden(CUSTOM0) ? vec3(0.0) : p;
 	emit = CUSTOM1.y;
+	surf = CUSTOM1.w;
+	col = trait_colour(COLOR.rgb);
 }
 
 void fragment() {
-	vec3 c = trait_colour(COLOR.rgb);
-	ALBEDO = c;
-	ROUGHNESS = surface == 1 ? 0.18 : 0.62;
-	SPECULAR = surface == 1 ? 0.8 : 0.25;
+	bool glossy = surf > 0.5 && surf < 1.5;
+	ALBEDO = col;
+	ROUGHNESS = glossy ? 0.18 : 0.62;
+	SPECULAR = glossy ? 0.8 : 0.25;
 	RIM = 0.1;
 	RIM_TINT = 0.6;
-	if (surface == 2) {
-		EMISSION = c * emit;
+	if (surf > 1.5) {
+		EMISSION = col * emit;
 	}
 }
