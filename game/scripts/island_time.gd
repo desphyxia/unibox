@@ -23,6 +23,7 @@ var moon := Sprite2D.new()
 var stars := Node2D.new()
 var _dusk_sent := false
 var _skip := {}                        ## a quick run of the clock to night or morning: from, to, t, secs
+var view_x := 0.0                      ## main.gd: how far east the view has slid (0 the meadow, 1024 the pond)
 
 
 func _ready() -> void:
@@ -47,6 +48,14 @@ func _ready() -> void:
 func is_night() -> bool:
 	## bedtime for the creatures: from 20:00 to dawn
 	return hour >= 20.0 or hour < 5.8
+
+
+func darkness() -> float:
+	## 0 by day, 1 at night, easing between at dusk and dawn (lanterns use it)
+	var h := hour
+	if h >= 12.0:
+		return smoothstep(18.8, 20.2, h)
+	return 1.0 - smoothstep(5.2, 6.4, h)
 
 
 func switching() -> bool:
@@ -99,11 +108,12 @@ func _process(delta: float) -> void:
 		_dusk_sent = false
 	if tint:
 		tint.color = tint_at(hour)
-	sun.position = _arc(hour, 5.6, 19.4)
+	stars.position.x = view_x                  # the sky goes with the view: the sun, moon and stars over either place
+	sun.position = _arc(hour, 5.6, 19.4) + Vector2(view_x, 0)
 	sun.scale = Vector2.ONE * 1.1
 	sun.modulate.a = clampf(minf(hour - 5.6, 19.4 - hour) * 1.2, 0.0, 0.9)
 	var mh := hour + 24.0 if hour < 12.0 else hour
-	moon.position = _arc(mh, 19.0, 30.0)
+	moon.position = _arc(mh, 19.0, 30.0) + Vector2(view_x, 0)
 	moon.scale = Vector2.ONE * 0.6
 	moon.modulate.a = clampf(minf(mh - 19.0, 30.0 - mh) * 1.2, 0.0, 0.85)
 	stars.modulate.a = clampf(minf(mh - 19.5, 29.5 - mh) * 0.8, 0.0, 0.8)
