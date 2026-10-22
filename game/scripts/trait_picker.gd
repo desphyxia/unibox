@@ -10,12 +10,10 @@ const INK := Color(0.29, 0.18, 0.28)
 const CHIP_R := 44.0
 
 var parents: Array = []                ## [Creature, Creature]: left and right
-var frames: SpriteFrames
-var anim_info := {}
 var pick := {"coat": 0, "glow": 1}     ## which parent each trait comes from: one from each to start with
 var root := Control.new()
-var _baby := AnimatedSprite2D.new()
-var _shown: Array = []                 ## the parents' pictures
+var _baby := FoxView.new(34.0)         ## live foxes, like the ones in the meadow
+var _shown: Array = []                 ## the parents
 var _chips := []                       ## [type, parent index, centre, radius]
 var _tick := Vector2.ZERO
 var _t := 0.0
@@ -25,10 +23,8 @@ var _open := 0.0
 var _done := false
 
 
-func _init(p_parents: Array, p_frames: SpriteFrames, infos: Dictionary) -> void:
+func _init(p_parents: Array) -> void:
 	parents = p_parents
-	frames = p_frames
-	anim_info = infos
 
 
 func _ready() -> void:
@@ -38,30 +34,18 @@ func _ready() -> void:
 	root.draw.connect(_draw_root)
 	add_child(root)
 	for i in 2:
-		var s := AnimatedSprite2D.new()
-		s.sprite_frames = frames
-		s.centered = false
-		var anim := "idle" if i == 0 or not anim_info.has("idle_left") else "idle_left"
-		s.play(anim)
-		s.offset = -_anchor(anim)
-		s.material = Traits.material(parents[i].traits)
-		s.flip_h = i == 1 and anim == "idle"
+		var s := FoxView.new(36.0)
+		s.fox.facing = 1.0 if i == 0 else -1.0     ## both face the baby
+		s.fox.shells = 4
+		s.fox.set_traits(parents[i].traits)
 		root.add_child(s)
 		_shown.append(s)
-	_baby.sprite_frames = frames
-	_baby.centered = false
-	_baby.play("idle")
-	_baby.offset = -_anchor("idle")
+	_baby.fox.shells = 4
 	root.add_child(_baby)
 	_update_baby()
 	get_viewport().size_changed.connect(_layout)
 	_layout()
 	Sfx.play("chime", 1.1, 0.0, -4.0)
-
-
-func _anchor(anim: String) -> Vector2:
-	var a: Array = anim_info[anim]["anchor"]
-	return Vector2(a[0], a[1])
 
 
 func _view() -> Vector2:
@@ -94,7 +78,7 @@ func baby_traits() -> Dictionary:
 
 
 func _update_baby() -> void:
-	_baby.material = Traits.material(baby_traits())
+	_baby.fox.set_traits(baby_traits())
 
 
 # ------------------------------------------------------------------ touch (from main.gd)

@@ -1,9 +1,9 @@
 class_name Creature
 extends Touchable
-## A creature in the meadow, played from rendered animations: an idle loop when sitting, a walk cycle when moving, and
-## one-shot clips for eating, being petted (happy), the hunger cue, dozing off, sleeping and turning round. Every
-## animation is rendered facing each way ("eat" and "eat_left"); the turns run the whole way round, from one side's rest
-## pose to the other's ("turn_sit" from the right, "turn_sit_left" from the left). Without left frames it mirrors.
+## A creature in the meadow, drawn as a live 3D fox (fox_view.gd): an idle loop when sitting, a walk cycle when moving,
+## and one-shot clips for eating, being petted (happy), the hunger cue, lying down to sleep, sleeping, waking and
+## turning round (half way, sitting or standing, from one side's view to the other's). The clips keep the timings the
+## rendered frames had, and their events (bites, the sigh) still count in those frames.
 ## Touch: tap to pet, drag to walk it somewhere. main.gd also calls it to a tapped spot and hands it food.
 
 signal petted
@@ -11,8 +11,9 @@ signal ate
 signal clip_finished
 signal arrived                         ## a walk ended (dragged, called or wandering)
 
-## Points on the sitting fox, in render pixels of the 640-wide frames (facing right). The creature's origin is the
-## anchor from anim.json: the same ground point in every animation, so the clips line up.
+## Points on the sitting fox, in the Blender renders' pixels (640-wide frames, facing right): the live fox is drawn at
+## the same scale and camera. The creature's origin is the fox's ground point (RENDER_ANCHOR in those frames).
+const RENDER_ANCHOR := Vector2(338.38, 502.22)
 const FEET_R := Vector2(297, 517)
 const MOUTH_R := Vector2(437, 222)
 const EAT_DROP := Vector2(-4, 44)          ## how far the mouth moves when the head dips to eat, render pixels
@@ -21,10 +22,16 @@ const TOP_R := 61.0
 const WALK_SPEED := 120.0
 const GROUND := Rect2(120, 525, 784, 205)  ## where it may walk (world), inside the always-visible area
 const LOOPS := ["idle", "walk", "sleep"]
+const CLIP_FRAMES := {"eat": 16, "happy": 16, "hunger": 20, "liedown": 20, "turn_sit": 13, "turn_stand": 13}  ## as rendered
+const WALK_STRIDE := 88.0                  ## render pixels a paw travels per walk cycle
+const WALK_STANCE := 0.6                   ## the share of the cycle a paw is on the ground
+## the shadow under each pose, render pixels: [x offset, width] facing right, then facing left
+const SHADOWS := {"sit": [Vector2(-41, 282), Vector2(-31, 265)], "stand": [Vector2(-4, 201), Vector2(3, 243)],
+	"sleep": [Vector2(30, 194), Vector2(-41, 251)]}
 
 var temperament := "playful"
 var base_scale := 0.5
-var traits := Traits.DEFAULT.duplicate()  ## coat and glow colours, drawn by recolouring the frames
+var traits := Traits.DEFAULT.duplicate()  ## coat and glow colours (the live fox's shaders recolour it)
 var voice := 1.0                       ## pitch of its sounds: babies squeak higher
 var shows_needs := true                ## variant A's hunger cue: only the child's first creature shows it
 var follow: Creature = null            ## a baby potters about near this parent
@@ -33,9 +40,7 @@ var meadow: Node2D                     ## main.gd: effects layer, the tree, isla
 
 var body := Node2D.new()               ## lift and tilt, pivot at the feet
 var squash := Node2D.new()             ## squash and stretch, times the depth scale
-var flip := Node2D.new()               ## mirrors the right-facing frames, only when there are no left ones
-var sprite := AnimatedSprite2D.new()
-var ghost := Sprite2D.new()            ## the previous frame, fading out: softens the change into and out of sleep
+var look: FoxView                      ## the live fox, in render pixels round its ground point
 var shadow := Sprite2D.new()
 
 var lift := 0.0                        ## animated by tweens
@@ -43,17 +48,15 @@ var tilt := 0.0
 var squash_v := Vector2.ONE
 var facing := 1.0
 
-var anims := {}                        ## name -> anim.json info
-var _ref := Vector2.ZERO               ## from the anchor to the sitting fox's feet, frame pixels
+var _anim := "idle"                    ## the loop or clip playing (turn_sit, turn_stand; liedown also when waking)
+var _ref := FEET_R - RENDER_ANCHOR     ## from the ground point to the sitting fox's feet, render pixels
 var target = null                      ## Vector2 to walk to, or null
 var speed_factor := 1.0
 var busy := false                      ## reacting or eating: stands still
 var turning := false
 var asleep := false
 var food_target: Node2D = null         ## an apple on the ground it is walking to
-var _clip := {}                        ## the one-shot clip playing: anim, seq (frame numbers), i, t, fps, events, face
-var _hop := 0.0
-var _walk_amount := 0.0
+var _clip := {}                        ## the one-shot clip playing: t, dur, fps, frames, fired, events, face
 var _idle_for := 0.0
 var _next_wander := 6.0
 var _press_at := Vector2.ZERO
@@ -71,8 +74,7 @@ var _next_cue := 0.0
 var _age := 0.0
 
 
-func setup(frames: SpriteFrames, infos: Dictionary, temper: String, world_scale: float) -> void:
-	anims = infos
+func setup(temper: String, world_scale: float) -> void:
 	temperament = temper
 	base_scale = world_scale
 	touch_priority = 20
@@ -80,25 +82,20 @@ func setup(frames: SpriteFrames, infos: Dictionary, temper: String, world_scale:
 	add_child(shadow)
 	add_child(body)
 	body.add_child(squash)
-	squash.add_child(flip)
-	flip.add_child(sprite)
-	squash.add_child(ghost)
-	ghost.centered = false
-	ghost.visible = false
-	sprite.sprite_frames = frames
-	sprite.centered = false
-	var idle: Dictionary = anims["idle"]
-	_ref = FEET_R - Vector2(idle["render_anchor"][0], idle["render_anchor"][1])
+	# the picture is made at the largest size it is shown (nearest the front of the meadow)
+	look = FoxView.new(FoxView.RENDER_PPU * world_scale * 1.12 * FoxView.sharpness)
+	look.fox.auto_next = false
+	look.fox.shells = 6 if world_scale >= 0.45 else 4   ## small foxes (babies) need fewer fur layers
+	look.fox.facing = facing
+	squash.add_child(look)
 	_play("idle")
-	sprite.frame = randi() % frames.get_frame_count("idle")
+	look.fox._idle_t = randf() * 2.0          ## not every fox breathing in step
 	_next_wander = _wander_gap()
 
 
 func set_traits(t: Dictionary) -> void:
 	traits = t.duplicate()
-	var m := Traits.material(traits)
-	sprite.material = m
-	ghost.material = m
+	look.fox.set_traits(traits)
 
 
 func _sfx(id: String, pitch := 1.0, vary := 0.06, db := 0.0) -> void:
@@ -127,10 +124,11 @@ func mouth_world() -> Vector2:
 func top_world() -> Vector2:
 	## curled up asleep the head is much lower; while lying down or getting up the tag follows it down or up
 	var curled := 0.0
-	if asleep and _base() == "sleep":
+	if asleep and _anim == "sleep":
 		curled = 190.0
-	elif _base() == "liedown":
-		curled = 190.0 * smoothstep(0.0, 1.0, float(sprite.frame) / maxf(1.0, sprite.sprite_frames.get_frame_count(sprite.animation) - 1))
+	elif _anim == "liedown":
+		var u := look.fox.progress()
+		curled = 190.0 * smoothstep(0.0, 1.0, u if look.fox.clip == "liedown" else 1.0 - u)
 	return position + Vector2(0, (TOP_R + curled - FEET_R.y + _ref.y) * depth_scale() - lift)
 
 
@@ -169,98 +167,61 @@ func touch_end(p: Vector2) -> void:
 
 
 # ------------------------------------------------------------------ clips
-func _has(anim: String) -> bool:
-	return anims.has(anim)
-
-
-func _side(anim: String) -> String:
-	## the frames for the way it faces now
-	if facing < 0 and anims.has(anim + "_left"):
-		return anim + "_left"
-	return anim
-
-
 func _base() -> String:
-	## the animation playing, whichever way it faces
-	return String(sprite.animation).trim_suffix("_left")
+	## the loop or clip playing, whichever way it faces
+	return _anim
 
 
-func _place_frames(name: String) -> void:
-	var info: Dictionary = anims[name]
-	sprite.offset = -Vector2(info["anchor"][0], info["anchor"][1])
-	flip.scale.x = -1.0 if facing < 0 and not name.ends_with("_left") else 1.0
-
-
-func _begin(anim: String, seq: Array, fps: float, events := {}, face := 0.0) -> void:
-	## anim is the exact frames to play (already "_left" or not); face, if set, is the way it faces once the clip ends
-	sprite.stop()
-	sprite.animation = anim
-	_place_frames(anim)
-	sprite.frame = seq[0]
-	_clip = {"anim": anim, "seq": seq, "i": 0, "t": 0.0, "fps": fps, "events": events, "face": face}
+func _begin(anim: String, fps: float, events := {}, face := 0.0, reverse := false) -> void:
+	## a one-shot clip at the rendered clip's frame rate; events are {frame index: Callable}; face, if set, is the way
+	## it faces once the clip ends (the turns)
+	var live: String = {"turn_sit": "turn"}.get(anim, anim)
+	if reverse and anim == "liedown":
+		live = "wake"
+	var dur: float = CLIP_FRAMES[anim] / fps
+	look.fox.speed = 1.0
+	look.fox.play(live, dur)
+	_anim = anim
+	_clip = {"t": 0.0, "dur": dur, "fps": fps, "frames": CLIP_FRAMES[anim], "fired": 0, "events": events, "face": face}
 	if events.has(0):
 		events[0].call()
 
 
 func play_clip(anim: String, fps := 12.0, reverse := false, events := {}) -> void:
-	## plays a one-shot clip and waits for it; events are {frame index: Callable}
-	var name := _side(anim)
-	var seq := range(sprite.sprite_frames.get_frame_count(name))
-	if reverse:
-		seq.reverse()
-	_begin(name, seq, fps, events)
+	## plays a one-shot clip and waits for it
+	_begin(anim, fps, events, 0.0, reverse)
 	await clip_finished
 
 
 func _step_clip(delta: float) -> void:
-	_clip["t"] += delta * _clip["fps"]
-	while not _clip.is_empty() and _clip["t"] >= 1.0:
-		_clip["t"] -= 1.0
-		_clip["i"] += 1
-		var seq: Array = _clip["seq"]
-		if _clip["i"] >= seq.size():
-			var face: float = _clip["face"]
-			_clip = {}
-			if face != 0.0:
-				facing = face
-			clip_finished.emit()
-			# nothing chained another clip: back to the right loop
-			if _clip.is_empty() and (face != 0.0 or not LOOPS.has(_base())):
-				_play("sleep" if asleep else ("walk" if target != null and not busy else "idle"), true)
-			return
-		sprite.frame = seq[_clip["i"]]
-		var ev: Dictionary = _clip["events"]
-		if ev.has(_clip["i"]):
-			ev[_clip["i"]].call()
-
-
-func _fade_out_current(time := 0.18) -> void:
-	## leave the frame on screen as it is and fade it away over what comes next
-	ghost.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
-	ghost.offset = sprite.offset
-	ghost.scale = Vector2(flip.scale.x, 1)
-	ghost.modulate.a = 1.0
-	ghost.visible = true
-	var t := create_tween()
-	t.tween_property(ghost, "modulate:a", 0.0, time)
-	t.tween_callback(func(): ghost.visible = false)
+	_clip["t"] += delta
+	var ev: Dictionary = _clip["events"]
+	var now := mini(int(_clip["t"] * _clip["fps"]), int(_clip["frames"]) - 1)
+	while _clip["fired"] < now:
+		_clip["fired"] += 1
+		if ev.has(_clip["fired"]):
+			ev[_clip["fired"]].call()
+			if _clip.is_empty():
+				return
+	if _clip["t"] >= _clip["dur"]:
+		var face: float = _clip["face"]
+		_clip = {}
+		if face != 0.0:
+			facing = face
+			look.fox.facing = face
+		clip_finished.emit()
+		# nothing chained another clip: back to the right loop
+		if _clip.is_empty() and (face != 0.0 or not LOOPS.has(_anim)):
+			_play("sleep" if asleep else ("walk" if target != null and not busy else "idle"), true)
 
 
 func turn_to(f: float) -> void:
-	## turn round on the spot, through facing the camera: a rendered clip from this side's rest pose to the other side's
+	## turn round on the spot, through facing the camera, from this side's view to the other side's
 	if f == facing or turning:
 		return
-	var standing := _base() == "walk"
-	var anim := ("turn_stand" if standing else "turn_sit") + ("" if facing > 0 else "_left")
-	if not _has(anim) or (f < 0 and not _has("idle_left")):
-		# no turn rendered for this side: flip over quickly
-		facing = f
-		_play(_base() if LOOPS.has(_base()) else "idle", true)
-		var tw := create_tween()
-		tw.tween_property(self, "squash_v:x", 1.0, 0.16).from(0.2)
-		return
+	var standing := _anim == "walk"
 	turning = true
-	_begin(anim, range(sprite.sprite_frames.get_frame_count(anim)), 28.0 if standing else 22.0, {}, f)
+	_begin("turn_stand" if standing else "turn_sit", 28.0 if standing else 22.0, {}, f)
 	await clip_finished
 	turning = false
 
@@ -279,27 +240,15 @@ func face_toward(x: float) -> void:
 		turn_to(f)
 
 
-func _crossfade_to_loop(anim: String) -> void:
-	_fade_out_current(0.45)
-	_play(anim, true)
-
-
 func fall_asleep() -> void:
-	## lies down and curls up: one rendered clip from the sitting pose to the sleep loop's first frame. Its fur is grown a
-	## little differently (it is rebuilt every frame), so a short fade covers the change at each end.
-	var clip := "liedown" if _has("liedown") else "doze"
-	if asleep or not _has("sleep") or not _has(clip):
+	## lies down and curls up: sitting, then lying like a sphinx, then curled up, which is where the sleep loop starts
+	if asleep:
 		return
 	asleep = true
 	busy = true
 	target = null
-	_fade_out_current(0.2)
-	await play_clip(clip, 12.0 if clip == "liedown" else 9.0)
-	if clip == "liedown":
-		_fade_out_current(0.2)
-		_play("sleep", true)
-	else:
-		_crossfade_to_loop("sleep")
+	await play_clip("liedown", 12.0)
+	_play("sleep", true)
 	Log.event("creature_sleep", "")
 	busy = false
 
@@ -313,14 +262,11 @@ func wake() -> void:
 	## from the sleep loop back to sitting: lying down played backward (it uncurls and sits up)
 	if not asleep:
 		return
-	var clip := "liedown" if _has("liedown") else "doze"
 	busy = true
-	_fade_out_current(0.2 if clip == "liedown" else 0.35)
-	await play_clip(clip, 15.0, true)
+	await play_clip("liedown", 15.0, true)
 	asleep = false
 	busy = false
 	_stay_awake_until = _age + 25.0
-	_fade_out_current(0.2)
 	_play("idle", true)
 	Log.event("creature_wake", "")
 
@@ -380,8 +326,7 @@ func pet(p: Vector2) -> void:
 			for h in [30.0, 16.0]:
 				t.tween_property(self, "lift", h, 0.17).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 				t.tween_property(self, "lift", 0.0, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	if _has("happy"):
-		await play_clip("happy", fps)
+	await play_clip("happy", fps)
 	if temperament == "curious":
 		Fx.sparkles(meadow.fx, head_world(), 5, 50)
 	busy = false
@@ -434,13 +379,7 @@ func eat(apple: Node2D, how: String) -> void:
 	var gone := func():
 		if is_instance_valid(apple):
 			apple.queue_free()
-	if _has("eat"):
-		await play_clip("eat", 12.0, false, {4: bite.bind(0), 7: bite.bind(1), 10: bite.bind(2), 11: gone})
-	else:
-		for i in 3:
-			bite.call(i)
-			await get_tree().create_timer(0.22).timeout
-		gone.call()
+	await play_clip("eat", 12.0, false, {4: bite.bind(0), 7: bite.bind(1), 10: bite.bind(2), 11: gone})
 	_sfx("happy")
 	Fx.sparkles(meadow.fx, position + Vector2(0, -200) * depth_scale(), 10, 120, Color(1, 0.95, 0.75))
 	Fx.hearts(meadow.fx, head_world() + Vector2(0, -30), 2)
@@ -463,11 +402,7 @@ func hunger_cue() -> void:
 	var tx: float = meadow.tree_position().x
 	if absf(tx - position.x) > 6 and signf(tx - position.x) != facing:
 		await turn_to(signf(tx - position.x))
-	if _has("hunger"):
-		await play_clip("hunger", 12.0, false, {9: func(): _sfx("sigh")})
-	else:
-		_sfx("sigh")
-		await get_tree().create_timer(1.4).timeout
+	await play_clip("hunger", 12.0, false, {9: func(): _sfx("sigh")})
 	busy = false
 
 
@@ -487,11 +422,10 @@ func appear(from: Vector2, hop := Vector2(120, 50)) -> void:
 
 
 func _play(anim: String, quiet := false) -> void:
-	## start a loop around the shared anchor; a small squash hides the change from walking to sitting
-	var name := _side(anim)
-	_place_frames(name)
-	sprite.speed_scale = 1.0
-	sprite.play(name)
+	## start a loop; a small squash softens the change from walking to sitting
+	_anim = anim
+	look.fox.speed = 1.0
+	look.fox.play(anim)
 	if anim == "idle" and not busy and not quiet:
 		var t := create_tween()
 		t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.07)
@@ -528,31 +462,29 @@ func _process(delta: float) -> void:
 			else:
 				position += d.normalized() * step
 				moving = true
-	var has_walk := _has("walk")
-	if has_walk and _clip.is_empty() and not asleep:
+	if _clip.is_empty() and not asleep:
 		if moving:
 			_still_for = 0.0
-			if _base() != "walk":
+			if _anim != "walk":
 				_play("walk")
-			var w: Dictionary = anims["walk"]
 			# cycles per second so a paw on the ground keeps pace with the meadow
 			var v := WALK_SPEED * speed_factor
-			sprite.speed_scale = clampf(w["stance"] * v / (w["stride"] * depth_scale()), 0.4, 3.0)
+			look.fox.speed = clampf(WALK_STANCE * v / (WALK_STRIDE * depth_scale()), 0.4, 3.0)
 		else:
 			_still_for += delta
-			if _base() == "walk" and _still_for > 0.12 and target == null:
+			if _anim == "walk" and _still_for > 0.12 and target == null:
 				_play("idle")
-	_walk_amount = move_toward(_walk_amount, 1.0 if (moving and not has_walk) else 0.0, delta * 6.0)
-	if moving and not has_walk:
-		_hop += delta * 10.0 * clampf(speed_factor, 0.8, 1.6)
-	var hop := absf(sin(_hop)) * 9.0 * _walk_amount
 	var s := depth_scale()
-	body.position.y = -(lift + hop)
-	body.rotation = tilt + sin(_hop) * 0.045 * _walk_amount
+	body.position.y = -lift
+	body.rotation = tilt
 	squash.scale = squash_v * s
-	var info: Dictionary = anims[sprite.animation]
-	shadow.scale = Vector2(info["shadow"][1], info["shadow"][1] * 0.17) / 256.0 * s * (1.0 - clampf((lift + hop) / 160.0, 0.0, 0.35))
-	shadow.position = Vector2(info["shadow"][0] * flip.scale.x, -4) * s
+	look.fox.facing = facing                  # a turn changes facing only as it ends
+	# the shadow follows the pose: sitting (or lying like a sphinx), standing, curled up
+	var w := look.fox.pose_weights()
+	var side := 0 if facing > 0 else 1
+	var sh: Vector2 = SHADOWS["sit"][side] * (w.x + w.z) + SHADOWS["stand"][side] * w.y + SHADOWS["sleep"][side] * w.w
+	shadow.scale = Vector2(sh.y, sh.y * 0.17) / 256.0 * s * (1.0 - clampf(lift / 160.0, 0.0, 0.35))
+	shadow.position = Vector2(sh.x, -4) * s
 	var calm := target == null and not busy and not turning and not _dragging and _clip.is_empty()
 	# bedtime: it dozes off at night and wakes at dawn
 	var night: bool = meadow != null and meadow.time != null and meadow.time.is_night()

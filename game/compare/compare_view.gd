@@ -1,36 +1,28 @@
 class_name CompareView
 extends CanvasLayer
-## Side by side, for deciding how creatures are made: on the left the fox as it is in the game now (rendered frames), on
-## the right the same fox as a live 3D model with shell fur (live_fox.gd), at the same size and camera angle. Buttons:
-## every clip the game has (both foxes play it together), close-up, fewer or more fur layers, the colour traits (both
-## recolour), back. Drag the live fox to turn it any way. The corner shows frames per second, so it can be judged on the iPad and iPhone.
+## The 3D fox check, from the parent area: the live fox (live_fox.gd) alone over the meadow, as big as in the game.
+## Buttons: every clip, close-up, spin (or drag the fox to turn it), fur layers, colours, speed test, back. The corner
+## shows frames per second, so it can be judged on an iPad or iPhone.
 ## Speed test runs through set-ups one after another (no 3D, fur on and off, edge smoothing, the 3D drawn over the whole
 ## screen or only round the foxes, five foxes as in the game) and lists the frames per second of each.
-## The 3D is drawn only in a box round the live foxes, as the game would, not over the whole screen.
-## Opened from the parent area; the meadow waits underneath.
+## The meadow's own foxes stop drawing while this is open (main.gd), so they do not count.
 
 signal closed
 
-const PPU := 40.0                       ## screen pixels per model unit at the game's size (640-wide renders at half size)
+const PPU := 40.0                       ## screen pixels per model unit at the game's size
 const INK := Color(0.29, 0.18, 0.28)
 const ACCENT := Color(0.85, 0.34, 0.5)
-const SPRITE_MB := 30.7                 ## the fox's frames as downloaded (art/tools/size_report.py)
 
-var frames: SpriteFrames
-var anim_info := {}
 var root := Control.new()
-var sprite := AnimatedSprite2D.new()
 var box := SubViewportContainer.new()
 var view := SubViewport.new()
 var cam := Camera3D.new()
 var fit_view := true                     ## the 3D box only round the foxes (false: the whole screen)
 var crowd: Array[Node3D] = []            ## extra live foxes for the speed test (holders, each with a LiveFox)
 ## where they stand (screen fractions) and their size: the second adult and three babies
-const CROWD := [[0.3, 0.7, 1.0], [0.52, 0.9, 0.68], [0.13, 0.92, 0.68], [0.55, 0.58, 0.68]]
+const CROWD := [[0.2, 0.68, 1.0], [0.82, 0.66, 0.68], [0.28, 0.93, 0.68], [0.74, 0.94, 0.68]]
 var fox: LiveFox
 var spin := Node3D.new()                 ## the drag turns this; the fox's own turns happen inside it
-var sprite_facing := 1.0
-var _sprite_clip := "idle"
 var _zoom := 1.0
 var _turn := 0.0                         ## the live fox's own turn, radians
 var _auto_turn := false
@@ -41,13 +33,10 @@ var _fps_avg := 60.0
 const LOOKS := [["apricot", "pink"], ["sky", "violet"], ["snow", "blue"], ["mint", "gold"], ["cocoa", "green"], ["lilac", "pink"]]
 
 
-func _init(p_frames: SpriteFrames, infos: Dictionary) -> void:
-	frames = p_frames
-	anim_info = infos
-
-
 func _ready() -> void:
 	layer = 20
+	process_priority = 1000                ## last of all, so it can time everyone's game code
+	get_tree().process_frame.connect(func(): _frame_start = Time.get_ticks_usec())
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.gui_input.connect(_gui_input)
@@ -59,15 +48,9 @@ func _ready() -> void:
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(bg)
-	# the rendered fox
-	sprite.sprite_frames = frames
-	sprite.centered = false
-	sprite.play("idle")
-	var a: Array = anim_info["idle"]["anchor"]
-	sprite.offset = -Vector2(a[0], a[1])
-	root.add_child(sprite)
-	# the live one, in its own little 3D world drawn over the meadow
+	# the live fox, in its own little 3D world drawn over the meadow
 	box.stretch = true
+	box.material = FoxView.premultiplied()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(box)
 	view.own_world_3d = true
@@ -83,40 +66,10 @@ func _ready() -> void:
 
 
 func _build_3d() -> void:
-	var env := Environment.new()
-	env.background_mode = Environment.BG_CLEAR_COLOR
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.95, 0.97, 1.0)
-	env.ambient_light_energy = 0.32
-	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
-	env.tonemap_exposure = 0.85
-	var we := WorldEnvironment.new()
-	we.environment = env
-	view.add_child(we)
-	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
-	cam.far = 200.0
-	view.add_child(cam)
+	FoxView._build_world(view, cam)
 	view.add_child(spin)
 	fox = LiveFox.new()
 	spin.add_child(fox)
-	var r: Dictionary = fox.meta["camera"]
-	var tgt := Vector3(r["center"][0], r["center"][1], r["center"][2])
-	var az := deg_to_rad(r["azimuth"])
-	var pitch := deg_to_rad(r["pitch"])
-	# Blender's camera sits at centre + (sin az cos p, -cos az cos p, sin p) * 40; in Godot's axes that is (x, z, -y)
-	cam.position = tgt + Vector3(sin(az) * cos(pitch), sin(pitch), cos(az) * cos(pitch)) * 40.0
-	cam.look_at(tgt, Vector3.UP)
-	# the render's lights, which ride with the camera, plus one from above and a soft bounce from the front
-	for l in [[Vector3(-5, 6, 9), 0.85, Color(1.0, 0.96, 0.9)], [Vector3(8, -2, 3), 0.3, Color(0.95, 0.97, 1.0)], [Vector3(6, 4, 2), 0.22, Color(1.0, 0.92, 1.0)]]:
-		var d := DirectionalLight3D.new()
-		d.light_energy = l[1]
-		d.light_color = l[2]
-		cam.add_child(d)
-		d.look_at_from_position(l[0], Vector3.ZERO, Vector3.UP)
-	var top := DirectionalLight3D.new()
-	top.light_energy = 0.18
-	view.add_child(top)
-	top.look_at_from_position(Vector3(0.5, 11, -0.3), Vector3.ZERO, Vector3(0, 0, -1))
 
 
 func _button(text: String, cb: Callable, on := false) -> Button:
@@ -141,8 +94,7 @@ func _button(text: String, cb: Callable, on := false) -> Button:
 
 
 var _bar := HFlowContainer.new()
-var _cap_l := Label.new()
-var _cap_r := Label.new()
+var _cap := Label.new()
 
 
 func _build_ui() -> void:
@@ -164,7 +116,7 @@ func _build_ui() -> void:
 	_bar.add_child(_button("Colours", func():
 		_traits_i = (_traits_i + 1) % LOOKS.size()
 		_apply_look()))
-	for l in [_fps, _cap_l, _cap_r]:
+	for l in [_fps, _cap]:
 		l.add_theme_color_override("font_color", INK)
 		l.add_theme_color_override("font_outline_color", Color(1, 1, 1, 0.85))
 		l.add_theme_constant_override("outline_size", 6)
@@ -174,9 +126,7 @@ func _build_ui() -> void:
 		root.add_child(l)
 	_fps.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var mb := FileAccess.get_file_as_bytes(LiveFox.DATA + ".bin").size() / 1.0e6
-	_cap_l.text = "Rendered frames (in the game now)\nabout %.0f MB for all the fox's clips" % SPRITE_MB
-	_cap_r.text = "Live 3D with shell fur\nevery clip computed live, model about %.1f MB" % mb
-	sprite.animation_finished.connect(_sprite_done)
+	_cap.text = "The live 3D fox, as in the meadow\nevery clip computed live, model about %.1f MB" % mb
 
 
 func _layers_text() -> String:
@@ -198,7 +148,6 @@ func _live_foxes() -> Array[LiveFox]:
 
 func _apply_look() -> void:
 	var t := {"coat": LOOKS[_traits_i][0], "glow": LOOKS[_traits_i][1]}
-	sprite.material = Traits.material(t)
 	fox.set_traits(t)
 
 
@@ -206,14 +155,11 @@ func _layout() -> void:
 	var v := root.get_viewport_rect().size
 	var ground := Vector2(0, v.y * 0.8)
 	var ppu := PPU * _zoom
-	sprite.scale = Vector2.ONE * 0.5 * _zoom
-	sprite.position = Vector2(v.x * 0.27, ground.y)
-	# the live fox's ground point lands at the same height on the right
 	var g: Array = fox.meta["ground"]
 	var tgt := cam.global_position + (-cam.global_transform.basis.z) * 40.0
 	var gp := Vector3(g[0], g[1], g[2])
 	var rel := cam.global_transform.basis.inverse() * (gp - tgt)   # where the ground point sits in the camera's plane
-	var want := Vector2(v.x * 0.73, ground.y)
+	var want := Vector2(v.x * 0.5, ground.y)
 	# the speed test's extra foxes: a step across the screen is along the camera's right, a step down is toward the
 	# camera on the ground (the camera looks down by its pitch, so nearer foxes also draw in front)
 	var spots := [[want, 1.0]]
@@ -246,15 +192,13 @@ func _layout() -> void:
 	_bar.position = Vector2(12, 12)
 	_bar.size = Vector2(v.x - 24, 0)
 	_fps.position = Vector2(14, v.y - 30)
-	for i in 2:
-		var l: Label = [_cap_l, _cap_r][i]
-		l.size = Vector2(v.x * 0.46, 50)
-		l.position = Vector2(v.x * (0.27 if i == 0 else 0.73) - l.size.x / 2.0, ground.y + 14)
+	_cap.size = Vector2(v.x * 0.6, 50)
+	_cap.position = Vector2(v.x * 0.5 - _cap.size.x / 2.0, ground.y + 14)
 
 
 func _gui_input(e: InputEvent) -> void:
-	# drag anywhere on the right half to turn the live fox (touches arrive here as the mouse)
-	if e is InputEventMouseMotion and e.button_mask & MOUSE_BUTTON_MASK_LEFT and e.position.x > root.get_viewport_rect().size.x * 0.5:
+	# drag anywhere to turn the live fox (touches arrive here as the mouse)
+	if e is InputEventMouseMotion and e.button_mask & MOUSE_BUTTON_MASK_LEFT:
 		_turn += e.relative.x * 0.012
 		_auto_turn = false
 
@@ -264,6 +208,7 @@ func _process(delta: float) -> void:
 		_turn += delta * TAU / 4.0
 	spin.rotation.y = _turn
 	_fps_avg = lerpf(_fps_avg, 1.0 / maxf(delta, 0.0001), 0.05)
+	_code_ms = (Time.get_ticks_usec() - _frame_start) / 1000.0
 	if _testing:
 		_fps.text = _status
 		return
@@ -285,8 +230,12 @@ const SPEED_TESTS := [
 ]
 const SETTLE := 1.0                      ## seconds before measuring (new shaders get built in the first frames)
 var test_seconds := 4.0                  ## measured per set-up
-var results := []                        ## [name, frames a second, slowest frame ms, % of frames slower than 20 ms]
+## [name, frames a second, slowest frame ms, % of frames slower than 20 ms, game code ms a frame, draw calls a frame]:
+## a slow frame with little game code time means the graphics chip is the limit
+var results := []
 var _testing := false
+var _frame_start := 0                    ## when this frame's game code began (just before every node's _process)
+var _code_ms := 0.0                      ## the last frame's game code, from then to the end of this screen's _process
 var _status := ""
 var _result_panel: PanelContainer
 
@@ -303,7 +252,6 @@ func speed_test() -> void:
 		_result_panel = null
 	var keep := [fox.shells, view.msaa_3d]
 	fox.play("walk")                     # the walk moves the most (legs, tails, head) and never ends
-	_sprite_play("walk")
 	results.clear()
 	for i in SPEED_TESTS.size():
 		var t: Array = SPEED_TESTS[i]
@@ -313,6 +261,8 @@ func speed_test() -> void:
 		var n := 0
 		var worst := 0.0
 		var slow := 0
+		var code := 0.0
+		var draws := 0.0
 		var t0 := Time.get_ticks_usec()
 		var last := t0
 		while last - t0 < int(test_seconds * 1.0e6):
@@ -323,10 +273,12 @@ func speed_test() -> void:
 			n += 1
 			worst = maxf(worst, ms)
 			slow += 1 if ms > 20.0 else 0
-		results.append([t[0], n / ((last - t0) / 1.0e6), worst, 100.0 * slow / maxi(n, 1)])
+			code += _code_ms
+			draws += Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+		var nn := maxi(n, 1)
+		results.append([t[0], n / ((last - t0) / 1.0e6), worst, 100.0 * slow / nn, code / nn, draws / nn])
 	_setup(["", 1, keep[0], {Viewport.MSAA_DISABLED: 0, Viewport.MSAA_2X: 2, Viewport.MSAA_4X: 4}.get(keep[1], 4), true])
 	fox.play("idle")
-	_sprite_play("idle")
 	_testing = false
 	_bar.visible = true
 	_show_results()
@@ -341,8 +293,7 @@ func _setup(t: Array) -> void:
 		crowd.pop_back().queue_free()
 	box.visible = count > 0
 	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS if count > 0 else SubViewport.UPDATE_DISABLED
-	for n in [sprite, _cap_l, _cap_r]:
-		n.visible = count < 5            # five foxes fill the screen as in the game
+	_cap.visible = count < 5             # five foxes fill the screen as in the game
 	_set_shells(t[2])
 	view.msaa_3d = {0: Viewport.MSAA_DISABLED, 2: Viewport.MSAA_2X, 4: Viewport.MSAA_4X}[t[3]]
 	fit_view = t[4]
@@ -377,19 +328,19 @@ func _show_results() -> void:
 	var head := "Speed test · %s · %s · screen %d×%d" % [OS.get_name(), RenderingServer.get_video_adapter_name(), win.x, win.y]
 	lines.append(head)
 	var grid := GridContainer.new()
-	grid.columns = 4
-	grid.add_theme_constant_override("h_separation", 22)
+	grid.columns = 6
+	grid.add_theme_constant_override("h_separation", 18)
 	grid.add_theme_constant_override("v_separation", 4)
-	var cells := ["", "frames a second", "slowest frame", "frames slower than 20 ms"]
+	var cells := ["", "frames a second", "slowest frame", "slower than 20 ms", "game code", "draw calls"]
 	for r in results:
-		cells.append_array([r[0], "%.0f" % r[1], "%.0f ms" % r[2], "%.0f%%" % r[3]])
-		lines.append("%s: %.0f fps, slowest %.0f ms, %.0f%% slow" % [r[0], r[1], r[2], r[3]])
+		cells.append_array([r[0], "%.0f" % r[1], "%.0f ms" % r[2], "%.0f%%" % r[3], "%.1f ms" % r[4], "%.0f" % r[5]])
+		lines.append("%s: %.0f fps, slowest %.0f ms, %.0f%% slow, code %.1f ms, %.0f draws" % [r[0], r[1], r[2], r[3], r[4], r[5]])
 	for i in cells.size():
 		var l := Label.new()
 		l.text = cells[i]
 		l.add_theme_color_override("font_color", INK)
-		l.add_theme_font_size_override("font_size", 15 if i < 4 else 16)
-		if i % 4 > 0:
+		l.add_theme_font_size_override("font_size", 14 if i < 6 else 15)
+		if i % 6 > 0:
 			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 		grid.add_child(l)
 	for txt in [head, "", "Tap to close"]:
@@ -414,50 +365,13 @@ func _show_results() -> void:
 	print("SPEED ", " | ".join(lines))
 
 
-# ------------------------------------------------------------------ clips, on both foxes at once
-const SPRITE_FPS := {"idle": 12.0, "walk": 12.0, "eat": 12.0, "happy": 14.0, "hunger": 12.0, "liedown": 12.0, "sleep": 12.0,
-	"wake": 15.0, "turn": 22.0}
-
-
+# ------------------------------------------------------------------ clips
 func play_clip(name: String) -> void:
 	if name == "wake" and fox.clip != "sleep":
 		return
 	if fox.clip == "sleep" and name != "wake":
 		return                           # asleep: only waking up
 	fox.play(name)
-	_sprite_play(name)
-
-
-func _sprite_name(name: String) -> String:
-	var n: String = {"wake": "liedown", "turn": "turn_sit"}.get(name, name)
-	var left := n + "_left"
-	return left if sprite_facing < 0 and frames.has_animation(left) else n
-
-
-func _sprite_play(name: String) -> void:
-	_sprite_clip = name
-	var anim := _sprite_name(name)
-	sprite.animation = anim
-	var a: Array = anim_info[anim]["anchor"]
-	sprite.offset = -Vector2(a[0], a[1])
-	sprite.speed_scale = SPRITE_FPS[name] / frames.get_animation_speed(anim)
-	if name == "wake":
-		sprite.play_backwards(anim)
-	else:
-		sprite.play(anim)
-
-
-func _sprite_done() -> void:
-	match _sprite_clip:
-		"liedown":
-			_sprite_play("sleep")
-		"turn":
-			sprite_facing = -sprite_facing
-			_sprite_play("idle")
-		"idle", "walk", "sleep":
-			pass
-		_:
-			_sprite_play("idle")
 
 
 func close() -> void:

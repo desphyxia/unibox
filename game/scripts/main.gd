@@ -3,7 +3,7 @@ extends Node2D
 ## it, call it, feed it apples from the tree; a parent can name it through the gate. Island time runs from dawn
 ## to dusk in about ten minutes. A few minutes in, a second fox comes to the nest; bring yours over and an egg appears,
 ## the child picks the baby's colours from its parents and hatches it (breeding.gd, trait_picker.gd). Follows
-## docs/first-ten-minutes.md, without the pond and dressing so far.
+## docs/first-ten-minutes.md, without the pond and dressing so far. The foxes are live 3D models (fox_view.gd).
 
 const BASE := Vector2(1024, 768)            ## the area every screen shows; wider or taller screens see more meadow
 const NEST_AT := Vector2(512, 600)
@@ -24,14 +24,12 @@ var creature: Creature                      ## the child's first creature (hatch
 var creatures: Array[Creature] = []         ## every creature in the meadow
 var breeding: Breeding
 var picker: TraitPicker                     ## open while the child chooses a new egg's traits
-var compare: CompareView                    ## the rendered and live 3D foxes side by side (from the parent area)
+var compare: CompareView                    ## the 3D fox check and speed test (from the parent area)
 var _selected: Creature                     ## the creature touched last: a tap on the meadow calls this one
 var tag: NameTag
 var time: IslandTime
 var ui: ParentUI
 var sky: SkyButton                          ## the sun or moon in the corner: switches between day and night
-var frames: SpriteFrames
-var anim_info := {}                         ## animation name -> its anim.json (anchor, shadow, stride)
 var _spots_used := {}
 var _active: Touchable = null
 var _ground_press = null
@@ -40,11 +38,8 @@ var _finger := -1                           ## the touch being followed; Safari 
 
 func _ready() -> void:
 	randomize()
-	var names := []
-	for anim in ["idle", "walk", "sleep", "eat", "happy", "hunger", "liedown", "doze", "turn_sit", "turn_stand"]:
-		names.append_array([anim, anim + "_left"])       ## each also rendered facing left (the turns: from the left)
-	frames = _load_frames("res://art/creatures/%s" % Game.kind, names)
 	_build_world()
+	_warm_up()
 	ui = ParentUI.new()
 	add_child(ui)
 	ui.new_session_requested.connect(_new_session)
@@ -71,25 +66,13 @@ func _ready() -> void:
 	_start_session()
 
 
-func _load_frames(folder: String, names: Array) -> SpriteFrames:
-	## each animation is a folder of frames plus anim.json (made by art/tools/pack_anim.py)
-	var f := SpriteFrames.new()
-	for anim in names:
-		var dir: String = "%s/%s" % [folder, anim]
-		var meta := FileAccess.get_file_as_string(dir + "/anim.json")
-		if meta == "":
-			continue
-		var info: Dictionary = JSON.parse_string(meta)
-		anim_info[anim] = info
-		f.add_animation(anim)
-		f.set_animation_speed(anim, float(info.get("fps", 12.0)))
-		f.set_animation_loop(anim, Creature.LOOPS.has(anim.trim_suffix("_left")))
-		var i := 0
-		while ResourceLoader.exists("%s/frame_%02d.png" % [dir, i]):
-			f.add_frame(anim, load("%s/frame_%02d.png" % [dir, i]))
-			i += 1
-	f.remove_animation("default")
-	return f
+func _warm_up() -> void:
+	## a tiny fox drawn out of sight for a moment: the model loads and the 3D shaders are built now, while the egg waits,
+	## not with a stutter when it hatches
+	var warm := FoxView.new(4.0)
+	warm.position = Vector2(-5000, -5000)
+	add_child(warm)
+	get_tree().create_timer(0.6).timeout.connect(warm.queue_free)
 
 
 func _build_world() -> void:
@@ -174,7 +157,7 @@ func spawn_creature(traits: Dictionary, size: float, at: Vector2, temper: String
 	var c := Creature.new()
 	c.meadow = self
 	c.facing = face
-	c.setup(frames, anim_info, temper, CREATURE_SCALE * size)
+	c.setup(temper, CREATURE_SCALE * size)
 	c.set_traits(traits)
 	c.position = at
 	world.add_child(c)
@@ -185,13 +168,16 @@ func spawn_creature(traits: Dictionary, size: float, at: Vector2, temper: String
 func open_compare() -> void:
 	if compare:
 		return
-	compare = CompareView.new(frames, anim_info)
-	compare.closed.connect(func(): compare = null)
+	compare = CompareView.new()
+	world.visible = false                   # the meadow's foxes stop drawing, so the speed test measures its own
+	compare.closed.connect(func():
+		compare = null
+		world.visible = true)
 	add_child(compare)
 
 
 func open_picker(parents: Array, done: Callable) -> void:
-	picker = TraitPicker.new(parents, frames, anim_info)
+	picker = TraitPicker.new(parents)
 	picker.chosen.connect(func(t, src):
 		picker = null
 		done.call(t, src))
