@@ -9,7 +9,8 @@ extends RefCounted
 ## The creature's own tool (tools/build_fox.gd) supplies the vertices, bones, weights and motion.
 ##
 ## Vertex table (Dictionary of packed arrays, one entry a vertex):
-##   pos, nrm, tan (PackedVector3Array: rest position, normal, fur direction), col (PackedColorArray),
+##   pos, nrm, tan (PackedVector3Array: rest position, normal, fur direction; only the fur direction's part along the
+##     surface is kept as the tangent, since Godot keeps tangents flat on the surface), col (PackedColorArray),
 ##   c0, c1, c2 (PackedFloat32Array, four a vertex: CUSTOM0..2), bones (PackedInt32Array, four a vertex),
 ##   weights (PackedFloat32Array, four a vertex), shapes ({name: {"pos", "nrm", "tan"}}: the vertices in that shape).
 
@@ -60,7 +61,7 @@ static func _arrays(t: Dictionary, order: PackedInt32Array, pos: PackedVector3Ar
 		var i := order[k]
 		p[k] = pos[i]
 		q[k] = nrm[i]
-		var d := tan[i]
+		var d := tan[i] - nrm[i] * tan[i].dot(nrm[i])     # along the surface
 		if d.length() < 1e-6:
 			d = nrm[i].cross(Vector3.UP if absf(nrm[i].y) < 0.9 else Vector3.RIGHT)   # any direction across the normal
 		d = d.normalized()

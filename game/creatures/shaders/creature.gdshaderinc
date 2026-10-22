@@ -1,9 +1,10 @@
 // Shared by the creature shaders (skin, fur, halo). Godot's skeleton and blend shapes have already moved each vertex
 // before these run. Per vertex, from the creature builder (tools/creature_builder.gd):
 //   COLOR = colour, alpha how much lighter the fur tips are
-//   TANGENT = the fur's combed direction
-//   CUSTOM0 = (fur lift length, fur droop length, fur length, blink piece: 1 shown open, 2 shown closed)
-//   CUSTOM1 = (glows, emission, surface: 0 lit 1 glossy 2 glowing, furry)
+//   TANGENT = the direction the fur is combed along the surface
+//   CUSTOM0 = (fur lift length, fur droop length, fur length outward along the normal, blink piece: 1 shown open,
+//              2 shown closed)
+//   CUSTOM1 = (glows, emission, surface: 0 lit 1 glossy 2 glowing, fur length along the surface)
 //   CUSTOM2 = (position at rest, 0): fur strands keep their pattern however the creature moves
 
 uniform float eyes_closed = 0.0;

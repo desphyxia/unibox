@@ -47,7 +47,9 @@ head, ears, six along each tail, hip, knee and paw for each leg, the foxfires, a
 AnimationPlayer with every clip: idle, walk, eat, happy, hungry, lie down, sleep, wake up, and a half turn sitting or
 standing from either side. `creatures/creature_model.gd` runs it: it plays the clips, adds the fur layers, the trait
 colours and the idle blinks, and turns the fox to face either way. Fur is shell fur: the furry skin plus 6 thin copies
-of it (4 for babies) stacked in one mesh, with holes cut by a small stored noise texture (`creatures/shaders/`). Coat
+of it (4 for babies) stacked in one mesh and lifted along the fur when the game starts, so the skeleton carries them
+(the web renderer gives shaders no tangents, so the fur can't be grown in the shader), with holes cut by a small stored
+noise texture (`creatures/shaders/`). Coat
 and glow colours are worked out by the shaders, so a new colour costs no download. The fox is about 1.1 MB to download.
 
 **Building a creature:** `art/generators/fox_live_export.py` (Blender) exports the fox's mesh in its four poses with

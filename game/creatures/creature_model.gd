@@ -89,8 +89,11 @@ func _material(shader: Shader) -> ShaderMaterial:
 
 
 static func _layered(src: ArrayMesh, layers: int) -> ArrayMesh:
-	## the furry skin and `layers` copies of it stacked in one mesh; each copy's height (0 the skin, 1 the tips) goes in
-	## CUSTOM2.w, which the fur shader lifts it by. Made once for each source and layer count.
+	## the furry skin and `layers` copies of it stacked in one mesh, each copy already lifted to its height along the
+	## fur (out along the normal, combed along the surface, drooping a little), in the rest shape and in every blend
+	## shape; the skeleton then carries the layers like any other point (the web renderer passes no tangents to a shader,
+	## so the fur can't be grown there). Each copy's height (0 the skin, 1 the tips) goes in CUSTOM2.w for the fur
+	## shader's holes and colours. Made once for each source and layer count.
 	var key := "%s#%d" % [src.resource_path if src.resource_path != "" else str(src.get_instance_id()), layers]
 	if _stacks.has(key):
 		return _stacks[key]
@@ -99,10 +102,13 @@ static func _layered(src: ArrayMesh, layers: int) -> ArrayMesh:
 		return src                         # the engine kept no copy of the mesh: the skin alone, no fur
 	var nv: int = (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
 	var copies := layers + 1
+	var c0: PackedFloat32Array = a[Mesh.ARRAY_CUSTOM0]
+	var c1: PackedFloat32Array = a[Mesh.ARRAY_CUSTOM1]
 	var out := []
 	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = _lift(a[Mesh.ARRAY_VERTEX], a[Mesh.ARRAY_NORMAL], a[Mesh.ARRAY_TANGENT], c0, c1, layers)
 	for k in Mesh.ARRAY_MAX:
-		if a[k] == null or k == Mesh.ARRAY_INDEX or k == Mesh.ARRAY_CUSTOM2:
+		if a[k] == null or k in [Mesh.ARRAY_INDEX, Mesh.ARRAY_CUSTOM2, Mesh.ARRAY_VERTEX]:
 			continue
 		var arr = a[k].duplicate()
 		for c in layers:
@@ -128,7 +134,8 @@ static func _layered(src: ArrayMesh, layers: int) -> ArrayMesh:
 	for b in src.surface_get_blend_shape_arrays(0):
 		var sb := []
 		sb.resize(Mesh.ARRAY_MAX)
-		for k in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT]:
+		sb[Mesh.ARRAY_VERTEX] = _lift(b[Mesh.ARRAY_VERTEX], b[Mesh.ARRAY_NORMAL], b[Mesh.ARRAY_TANGENT], c0, c1, layers)
+		for k in [Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT]:
 			if b[k] == null:
 				continue
 			var arr = b[k].duplicate()
@@ -146,6 +153,31 @@ static func _layered(src: ArrayMesh, layers: int) -> ArrayMesh:
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out, shapes, {}, flags)
 	_stacks[key] = m
 	return m
+
+
+static func _lift(pos: PackedVector3Array, nrm: PackedVector3Array, tan: PackedFloat32Array, c0: PackedFloat32Array,
+		c1: PackedFloat32Array, layers: int) -> PackedVector3Array:
+	## every copy's points: the skin's, then each layer's, lifted along the fur (as in creatures/shaders/fur.gdshader)
+	var out := pos.duplicate()
+	for c in range(1, layers + 1):
+		var h := float(c) / layers
+		var rise := 1.0 - (1.0 - h) * (1.0 - h)
+		var comb_k := pow(h, 1.15)
+		var drop := h * h
+		var part := pos.duplicate()
+		for i in pos.size():
+			var n := nrm[i]
+			var t := Vector3(tan[i * 4], tan[i * 4 + 1], tan[i * 4 + 2])
+			part[i] = pos[i] + n * (c0[i * 4] * rise + c0[i * 4 + 2] * comb_k) + t * (c1[i * 4 + 3] * comb_k) \
+				- Vector3(0.0, c0[i * 4 + 1] * drop, 0.0)
+		out.append_array(part)
+	return out
+
+
+static func release_shared() -> void:
+	## let go of the shared fur meshes and noise (when the game closes), so nothing is left over at exit
+	_stacks.clear()
+	_noise = null
 
 
 func fur_triangles() -> int:

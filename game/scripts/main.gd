@@ -276,6 +276,10 @@ func apple_released(a: Apple) -> void:
 
 
 # ------------------------------------------------------------------ touch routing
+func _exit_tree() -> void:
+	CreatureModel.release_shared()
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_WM_WINDOW_FOCUS_OUT:
 		_finger = -1                                # a lift we never heard about must not lock out the next touch
