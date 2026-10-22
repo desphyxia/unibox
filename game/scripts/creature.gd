@@ -6,6 +6,8 @@ extends Touchable
 ## rendered frames had, and their events (bites, the sigh) still count in those frames.
 ## Touch: tap to pet, drag to walk it somewhere. main.gd also calls it to a tapped spot and hands it food. It looks at a
 ## finger on the meadow (or the apple it carries) while it isn't busy, and wears things from the basket (wardrobe.gd).
+## A baby grows up (grow_up): from its hatching size to an adult's over a few minutes, with a little moment halfway and
+## when it is grown. Every creature has its own name (pet_name; the child's first one keeps Game.creature_name).
 
 signal petted
 signal ate
@@ -24,6 +26,13 @@ var temperament := "playful"
 var base_scale := 0.5
 var traits := Traits.defaults()           ## coat and glow colours (the model's shaders recolour it)
 var voice := 1.0                       ## pitch of its sounds: babies squeak higher
+var pet_name := ""                     ## its name (the child's first creature uses Game.creature_name instead)
+var who := "first"                     ## for the log: first, second, baby1, baby2...
+var tag: NameTag
+var growing := false                   ## a baby growing up (grow_up)
+var grow_seconds := 180.0
+var grow_age := 0.0
+var _grow := []                        ## [from scale, to scale, from voice, stage reached: 0 baby, 1 young, 2 grown]
 var shows_needs := true                ## variant A's hunger cue: only the child's first creature shows it
 var follow: Creature = null            ## a baby potters about near this parent
 var home = null                        ## Vector2: stays near here when it wanders (the second adult by the nest)
@@ -65,7 +74,8 @@ var _next_cue := 0.0
 var _age := 0.0
 
 
-func setup(temper: String, world_scale: float) -> void:
+func setup(temper: String, world_scale: float, picture_scale := -1.0) -> void:
+	## picture_scale: the largest size it will be shown at (a baby that will grow), so its picture stays sharp
 	temperament = temper
 	base_scale = world_scale
 	touch_priority = 20
@@ -74,7 +84,7 @@ func setup(temper: String, world_scale: float) -> void:
 	add_child(body)
 	body.add_child(squash)
 	# the picture is made at the largest size it is shown (nearest the front of the meadow)
-	look = CreatureView.new(CreatureView.RENDER_PPU * world_scale * 1.12 * CreatureView.sharpness)
+	look = CreatureView.new(CreatureView.RENDER_PPU * maxf(world_scale, picture_scale) * 1.12 * CreatureView.sharpness)
 	look.model.auto_next = false
 	look.model.shells = 6 if world_scale >= 0.45 else 4   ## small foxes (babies) need fewer fur layers
 	look.model.facing = facing
@@ -435,6 +445,56 @@ func hunger_cue() -> void:
 	busy = false
 
 
+func set_pet_name(n: String) -> void:
+	pet_name = n.strip_edges().left(16)
+	if tag:
+		tag.set_text(pet_name)
+
+
+# ------------------------------------------------------------------ growing up
+const STAGES := ["baby", "young", "grown"]
+
+
+func grow_up(to_scale: float, seconds: float) -> void:
+	## grow from its size now to to_scale over this many seconds of island time (faster when island time runs fast)
+	growing = true
+	grow_seconds = seconds
+	grow_age = 0.0
+	_grow = [base_scale, to_scale, voice, 0]
+
+
+func stage() -> String:
+	return STAGES[_grow[3]] if growing or not _grow.is_empty() else "grown"
+
+
+func _grow_step(delta: float) -> void:
+	var speed: float = meadow.time.speed if meadow and meadow.time else 1.0
+	grow_age = minf(grow_age + delta * speed, grow_seconds)
+	var k := smoothstep(0.0, 1.0, grow_age / grow_seconds)
+	base_scale = lerpf(_grow[0], _grow[1], k)
+	voice = lerpf(_grow[2], 1.0, k)
+	var reached := 2 if grow_age >= grow_seconds else (1 if grow_age >= grow_seconds * 0.5 else 0)
+	if reached > _grow[3]:
+		_grow[3] = reached
+		_grew(STAGES[reached])
+	if reached == 2:
+		growing = false
+
+
+func _grew(to_stage: String) -> void:
+	## a little moment: it stretches up, sparkles and chirps (a bit deeper each time)
+	Log.event("creature_grew", "%s=%s" % [who, to_stage])
+	if to_stage == "grown":
+		look.model.shells = 6                  # an adult's fur
+	if asleep:
+		return
+	_sfx("happy", 0.95)
+	Fx.sparkles(meadow.fx, head_world(), 10, 90, Color(1, 0.95, 0.8))
+	var t := create_tween()
+	t.tween_property(self, "squash_v", Vector2(0.9, 1.14), 0.18).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.tween_property(self, "squash_v", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
 func appear(from: Vector2, hop := Vector2(120, 50)) -> void:
 	## hatched: pops out of the egg, then hops clear of the nest
 	position = from
@@ -475,6 +535,8 @@ func _wander_gap() -> float:
 # ------------------------------------------------------------------ every frame
 func _process(delta: float) -> void:
 	_age += delta
+	if growing:
+		_grow_step(delta)
 	if not _clip.is_empty():
 		_step_clip(delta)
 	var moving := false

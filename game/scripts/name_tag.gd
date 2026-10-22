@@ -1,7 +1,8 @@
 class_name NameTag
 extends Touchable
 ## A small tag floating above the creature: a paw until a parent names it, then the paw plus the name.
-## Tapping it opens the parental gate and the name field (never blocks play).
+## Tapping it opens the parental gate and the name field (never blocks play). Tags over creatures standing close
+## together stack up instead of covering each other.
 
 signal pressed
 
@@ -17,6 +18,7 @@ var _size := Vector2(52, 52)
 func _ready() -> void:
 	touch_priority = 40
 	z_index = 90
+	add_to_group("name_tags")
 	font = ThemeDB.fallback_font
 
 
@@ -39,7 +41,15 @@ func _process(delta: float) -> void:
 	_t += delta
 	if follow and is_instance_valid(follow):
 		var top := follow.top_world()
-		position = position.lerp(Vector2(follow.position.x, top.y - 34 + sin(_t * 2.2) * 4.0), minf(1.0, delta * 10.0))
+		var goal := Vector2(follow.position.x, top.y - 34)
+		# step above any earlier tag it would cover
+		for t in get_tree().get_nodes_in_group("name_tags"):
+			if t == self or t.get_instance_id() > get_instance_id() or not t.visible:
+				continue
+			var other := t as NameTag
+			if absf(goal.x - other.position.x) < (_size.x + other._size.x) / 2.0 + 8.0 and absf(goal.y - other.position.y) < _size.y + 6.0:
+				goal.y = other.position.y - _size.y - 8.0
+		position = position.lerp(goal + Vector2(0, sin(_t * 2.2) * 4.0), minf(1.0, delta * 10.0))
 
 
 func _draw() -> void:

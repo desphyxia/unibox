@@ -20,6 +20,7 @@ var _hold := 0.0
 var _holding := false
 var _modal: Control
 var _name_edit: LineEdit
+var _naming: Creature = null           ## whose name the field edits (null: the child's first creature, Game.creature_name)
 var _time_speed := 1.0
 
 
@@ -176,9 +177,13 @@ func gate(on_pass: Callable) -> void:
 
 
 # ------------------------------------------------------------------ the parent area
-func open_name_only() -> void:
+func open_name_only(who: Creature = null) -> void:
+	_naming = who
 	var box := _panel_box(480)
-	_label(box, "Name the creature", 26, ACCENT)
+	var title := "Name the creature"
+	if who:
+		title = "Name the baby" if who.who.begins_with("baby") else "Name the second %s" % Game.kind
+	_label(box, title, 26, ACCENT)
 	_name_field(box)
 	_button(box, "Done", _close)
 	_name_edit.grab_focus()
@@ -187,7 +192,7 @@ func open_name_only() -> void:
 func _name_field(box: Control) -> void:
 	var row := _row(box)
 	_name_edit = LineEdit.new()
-	_name_edit.text = Game.creature_name
+	_name_edit.text = _naming.pet_name if _naming else Game.creature_name
 	_name_edit.placeholder_text = "Type a name"
 	_name_edit.max_length = 16
 	_name_edit.custom_minimum_size = Vector2(300, 52)
@@ -211,13 +216,18 @@ func _name_field(box: Control) -> void:
 
 func _save_name() -> void:
 	var n := _name_edit.text.strip_edges()
-	Game.set_creature_name(n)
-	Log.event("name_set", "length=%d" % n.length())      # the name itself stays out of the log
+	if _naming and is_instance_valid(_naming):
+		_naming.set_pet_name(n)
+	else:
+		Game.set_creature_name(n)
+	# the name itself stays out of the log
+	Log.event("name_set", "%s,length=%d" % [_naming.who if _naming and is_instance_valid(_naming) else "first", n.length()])
 	Sfx.play("chime")
 	_close()
 
 
 func open_panel() -> void:
+	_naming = null                         # the parent area's name field is the child's first creature
 	var box := _panel_box(620)
 	_label(box, "Parent area", 26, ACCENT)
 	_label(box, "Creature's name", 18)
