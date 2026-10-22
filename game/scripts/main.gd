@@ -143,6 +143,14 @@ func _layout() -> void:
 func _start_session() -> void:
 	Log.start_session()
 	Sfx.play("sparkle", 0.8, 0.0, -6.0)
+	# a test entry for checking the web build from a computer: the page address ending in #check opens the 3D fox check
+	# in close-up (children never see it; there is no link to it)
+	if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.hash")) == "#check":
+		get_tree().create_timer(1.0).timeout.connect(func():
+			open_compare()
+			compare._zoom = 2.0
+			compare._layout()
+			print("WEB CHECK fur triangles %d" % compare.fox.fur_triangles()))
 
 
 func _new_session() -> void:
