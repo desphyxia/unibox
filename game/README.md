@@ -53,6 +53,7 @@ Press and hold the dots in the top-right corner, answer the grown-ups question, 
 - variant A or B;
 - temperament;
 - island-time speed (fast for demos);
+- music on or off;
 - **Bring the second fox now**, instead of waiting about four minutes after the hatch;
 - **Creature: fox or unicorn**, for the next session (the egg hatches that kind, and the second adult and babies are
   the same kind);
@@ -123,7 +124,10 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   saved as two halves, `meadow.svg` and `meadow_east.svg`, imported with the same high-quality compression so the
   join doesn't show).
 - The sounds are synthesised (`art/generators/sfx.py`).
-- There's no music yet.
+- The music is made from code (`art/generators/music.py`): a day tune (76 beats a minute: a warm pad, a soft bass and a
+  music-box melody over Fmaj7, Dm7, Bbmaj7, Csus4, Fmaj7, Am7, Bbmaj7, C7) and a slower, lower night lullaby on the
+  same chords, each a seamless loop of 16 bars. `scripts/music.gd` plays both and crossfades them with island time (the
+  lullaby comes in as dusk falls), a little softer under the rain. About 1 MB together (22 kHz, compressed).
 
 ## Running
 - **Desktop:** open the folder in Godot 4.7.2 and press Play. The mouse acts as a finger.

@@ -95,9 +95,20 @@ func _panel_box(min_w := 520.0) -> VBoxContainer:
 	panel.add_theme_stylebox_override("panel", sb)
 	panel.custom_minimum_size = Vector2(min_w, 0)
 	center.add_child(panel)
+	# taller than the screen (the parent area on a phone or iPad in landscape): it scrolls with a finger
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel.add_child(scroll)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
-	panel.add_child(box)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(box)
+	var fit := func():
+		var want := box.get_combined_minimum_size()
+		var room := get_viewport().get_visible_rect().size.y - 110.0
+		scroll.custom_minimum_size = Vector2(want.x, minf(want.y, room))
+	box.minimum_size_changed.connect(fit)
+	fit.call_deferred()
 	return box
 
 
@@ -254,6 +265,15 @@ func open_panel() -> void:
 			_time_speed = s[0]
 			time_speed_changed.emit(_time_speed)
 			open_panel(), is_equal_approx(_time_speed, s[0]))
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_label(box, "Music", 18)
+	var rm := _row(box)
+	for m in [[true, "On"], [false, "Off"]]:
+		var b := _button(rm, m[1], func():
+			Game.music = m[0]
+			Game.save()
+			Log.event("setting", "music=%s" % ("on" if m[0] else "off"))
+			open_panel(), Game.music == m[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var sf := _button(box, "Bring the second %s now (it comes by itself about 4 min after the hatch)" % Game.kind, func():
 		_close()

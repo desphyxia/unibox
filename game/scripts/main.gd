@@ -41,6 +41,7 @@ var wardrobe: Wardrobe                      ## the basket of things to wear
 var pond: Pond
 var decor: DecorBasket                      ## the basket of things to place, at the pond
 var weather: Weather                        ## the one rain shower, and the rainbow after it
+var music: Music                            ## the day tune and the night lullaby
 var area := "meadow"                        ## the place in view
 var pan := 0.0                              ## how far east the view has slid (0 the meadow, 1024 the pond)
 var _pan_tween: Tween
@@ -169,6 +170,9 @@ func _build_world() -> void:
 	weather = Weather.new()
 	weather.meadow = self
 	world.add_child(weather)
+	music = Music.new()
+	music.meadow = self
+	add_child(music)
 	weather.rain_started.connect(func():
 		for c in creatures:
 			if is_instance_valid(c) and not c.asleep:
