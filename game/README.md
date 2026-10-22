@@ -1,6 +1,7 @@
 # Meadow prototype (step 1)
 
-The first playable slice of `docs/first-ten-minutes.md`, with one creature (the fox) in one place (the meadow).
+The first playable slice of `docs/first-ten-minutes.md`, with one creature (the fox or the unicorn) in one place (the
+meadow).
 Godot 4.7.2, Mobile renderer, landscape or portrait, iPad first. The creatures are live 3D models drawn into the 2D
 meadow (see "Live 3D foxes" below).
 
@@ -38,7 +39,9 @@ Press and hold the dots in the top-right corner, answer the grown-ups question, 
 - temperament;
 - island-time speed (fast for demos);
 - **Bring the second fox now**, instead of waiting about four minutes after the hatch;
-- **3D fox check and speed test**, the live fox on its own with every clip, and a speed test (see below);
+- **Creature: fox or unicorn**, for the next session (the egg hatches that kind, and the second adult and babies are
+  the same kind);
+- **3D creature check and speed test**, the live creature on its own with every clip, and a speed test (see below);
 - **New session** for the next child: a new egg and a new log.
 
 Each session writes a tab-separated event log on the device. In the parent area, **Show event log** displays it with
@@ -60,6 +63,16 @@ of it (4 for babies) stacked in one mesh and lifted along the fur when the game 
 noise texture (`creatures/shaders/`). Coat
 and glow colours are worked out by the shaders, so a new colour costs no download. The fox is about 1.1 MB to download.
 
+**The unicorn** (`creatures/unicorn/unicorn.scn`, about 0.6 MB) is built differently from the fox: Blender exports it
+once, standing, with its own skeleton (body, three neck bones, head, ears, three bones down each leg, four along the
+tail) and skin weights (`art/generators/unicorn_live_export.py`), and `tools/build_unicorn.gd` writes every clip as bone
+turns: idle, a four-beat walk, a nibble, a little prance, looking up and sighing, lying down (front legs, then hind
+legs, then the chin comes down to rest), sleeping, and the half turns. So it needs no pose shapes, and a new clip costs
+only a few kilobytes. Its coat and mane are its two traits, recoloured by part (each point says whether it is coat or
+mane), with eight coats and six manes in `scripts/traits.gd`. Its coat fur is short and soft (each model can set its
+own fur look). `tests/clip_sheet.tscn -- OUT_DIR unicorn` photographs every clip, and `tests/autoplay.tscn -- OUT_DIR
+unicorn` plays the whole session with it.
+
 **Building a creature:** `art/generators/fox_live_export.py` (Blender) exports the fox's mesh in its four poses with
 its fur and rig data to `art/exports/`; then `godot --headless --path . -s res://tools/build_fox.gd` builds the scene in
 about three seconds, with `tools/creature_builder.gd` doing the parts every creature shares (skin weights, blend
@@ -74,7 +87,7 @@ and night tint work as before. A tiny fox is drawn out of sight at start-up so t
 built before the egg hatches. On the native-app renderer the fur's strand edges are smoothed; the web build can't do
 that, so its fur is a little grainier than the app's will be.
 
-**3D fox check** (parent area): the live fox alone, as big as in the game, with buttons for every clip, close-up, spin
+**3D creature check** (parent area): the live creature alone, as big as in the game, with buttons for every clip, close-up, spin
 (or drag it), fur layers 4/6/8/12/off, colours and the speed test. The meadow's own foxes stop drawing while it is open.
 
 **Speed test** runs eight set-ups for about five seconds each, with the foxes walking: no 3D fox, one fox with no fur,
@@ -101,5 +114,5 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   rebuilds that page (`.github/workflows/pages.yml`).
 - **Local web build:** export the "Web" preset to `build/web`, run `python serve_web.py`, and open the printed
   address on the same Wi-Fi. Sound is off this way, because a home network serves plain http.
-- **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR` plays through the session with simulated
+- **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn]` plays through the session with simulated
   touches and saves a screenshot at each step.
