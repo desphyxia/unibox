@@ -1,6 +1,6 @@
 class_name FoxView
 extends Node2D
-## A live 3D fox (compare/live_fox.gd) drawn into the 2D meadow: it renders in its own small 3D world, with the camera
+## A live 3D fox (creatures/fox/fox.scn, run by creatures/creature_model.gd) drawn into the 2D meadow: it renders in its own small 3D world, with the camera
 ## and lights of the Blender renders, into a picture whose origin is the fox's ground point. This node's units are the
 ## renders' pixels (80 to a model unit), so a creature scales it the way it scaled the rendered frames before.
 ## The picture is only redrawn while the fox is on screen.
@@ -8,7 +8,9 @@ extends Node2D
 const RENDER_PPU := 80.0                         ## render pixels per model unit (640-wide frames, 8 units across)
 const BOX := Rect2(-5.25, -7.8, 10.5, 9.6)       ## the picture round the ground point, model units (x right, y down)
 
-var fox := LiveFox.new()
+const FOX := preload("res://creatures/fox/fox.scn")
+
+var fox: CreatureModel = FOX.instantiate()
 var view := SubViewport.new()
 var cam := Camera3D.new()
 var pic := Sprite2D.new()
@@ -28,10 +30,10 @@ func _ready() -> void:
 	view.size = Vector2i((BOX.size * ppu).ceil())
 	view.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	add_child(view)
-	_build_world(view, cam)
+	_build_world(view, cam, fox.get_meta("camera"))
 	view.add_child(fox)
 	# where the ground point lands in the picture
-	var g: Array = fox.meta["ground"]
+	var g: Array = fox.get_meta("ground")
 	var gp := Vector3(g[0], g[1], g[2])
 	var tgt := cam.global_position + (-cam.global_transform.basis.z) * 40.0
 	var rel := cam.global_transform.basis.inverse() * (gp - tgt)
@@ -56,7 +58,7 @@ static func premultiplied() -> CanvasItemMaterial:
 	return m
 
 
-static func _build_world(into: Node, camera: Camera3D) -> void:
+static func _build_world(into: Node, camera: Camera3D, r: Dictionary) -> void:
 	## the renders' camera (orthographic, 40 degrees round, 9 down) and their lights, which ride with the camera
 	var env := Environment.new()
 	env.background_mode = Environment.BG_CLEAR_COLOR
@@ -71,7 +73,6 @@ static func _build_world(into: Node, camera: Camera3D) -> void:
 	camera.projection = Camera3D.PROJECTION_ORTHOGONAL
 	camera.far = 200.0
 	into.add_child(camera)
-	var r: Dictionary = LiveFox.shared()["meta"]["camera"]
 	var tgt := Vector3(r["center"][0], r["center"][1], r["center"][2])
 	var az := deg_to_rad(r["azimuth"])
 	var pitch := deg_to_rad(r["pitch"])

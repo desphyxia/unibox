@@ -4,6 +4,7 @@ extends Node
 ## With OUT_DIR it also saves a picture of the five foxes and of the results.
 
 func _ready() -> void:
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)   # measure past the screen's 60
 	var args := OS.get_cmdline_user_args()
 	var main: Node = load("res://main.tscn").instantiate()
 	add_child(main)

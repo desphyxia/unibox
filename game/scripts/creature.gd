@@ -89,7 +89,7 @@ func setup(temper: String, world_scale: float) -> void:
 	look.fox.facing = facing
 	squash.add_child(look)
 	_play("idle")
-	look.fox._idle_t = randf() * 2.0          ## not every fox breathing in step
+	look.fox.random_start = true              ## not every fox breathing in step
 	_next_wander = _wander_gap()
 
 

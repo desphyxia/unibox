@@ -41,13 +41,22 @@ a **Copy all** button; this works on the iPad too, where the log sits in the bro
 name and no identifiers.
 
 ## Live 3D foxes
-Every fox is the same 3D model, drawn live (`compare/live_fox.gd`, `fox_live.gdshader`, `fox_fur.gdshader`,
-`fox_halo.gdshader`, `fox_rig.gdshaderinc`; exported by `art/generators/fox_live_export.py`). It blends four exported
-poses (sit, stand, sphinx, curled up) and computes each clip from the same motion curves the Blender renders used:
-idle, walk, eat, happy, hungry, lie down, sleep, wake up, and a half turn sitting or standing. Fur is shell fur: the
-furry skin drawn again as 6 thin layers (4 for babies) with holes cut by a small stored noise texture. Coat and glow
-colours are worked out by the shaders, so a new colour costs no download. The model is about 1.1 MB to download and is
-loaded once for every fox.
+Every fox is the same 3D model, a standard Godot scene (`creatures/fox/fox.scn`): a Skeleton3D with 44 bones (body,
+head, ears, six along each tail, hip, knee and paw for each leg, the foxfires, and neck helpers), a skinned "Skin" and
+"Fur" mesh with the four poses (sit, stand, sphinx, curled up) and the breathing as blend shapes, and an
+AnimationPlayer with every clip: idle, walk, eat, happy, hungry, lie down, sleep, wake up, and a half turn sitting or
+standing from either side. `creatures/creature_model.gd` runs it: it plays the clips, adds the fur layers, the trait
+colours and the idle blinks, and turns the fox to face either way. Fur is shell fur: the furry skin plus 6 thin copies
+of it (4 for babies) stacked in one mesh, with holes cut by a small stored noise texture (`creatures/shaders/`). Coat
+and glow colours are worked out by the shaders, so a new colour costs no download. The fox is about 1.1 MB to download.
+
+**Building a creature:** `art/generators/fox_live_export.py` (Blender) exports the fox's mesh in its four poses with
+its fur and rig data to `art/exports/`; then `godot --headless --path . -s res://tools/build_fox.gd` builds the scene in
+about three seconds, with `tools/creature_builder.gd` doing the parts every creature shares (skin weights, blend
+shapes, skeleton, baking clips into animations, saving). The clips are baked from the same motion curves the Blender
+renders used, and the build checks the skinned fox against those curves vertex by vertex: the average gap is under a
+hundredth of a screen pixel, the largest about two pixels at a few neck points (eating) and a slightly higher paw in
+mid-step.
 
 In the meadow each fox renders in its own small 3D world into a picture round its feet (`scripts/fox_view.gd`), which
 the creature (`scripts/creature.gd`) moves, scales for depth, squashes and sorts like any 2D thing, so the nest, apples
@@ -64,7 +73,7 @@ three babies, as in the game) with no fur, 4 layers with 2x smoothing, and 6 lay
 frames a second, the slowest frame, the share of frames slower than 20 ms, the time the game code takes a frame and
 the draw calls a frame, and writes the same to the event log. Little game-code time in a slow set-up means the
 graphics chip is the limit. A browser never goes above the screen's 60 frames a second, so set-ups that reach 60 show
-only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_DIR]` runs it on a computer.
+only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_DIR]` runs it on a computer (without the 60 frame cap).
 
 ## Stand-ins
 - The fox's motions are the curves from the Blender renders, now computed live. The walk plays at the speed that
