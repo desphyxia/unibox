@@ -150,7 +150,9 @@ func _start_session() -> void:
 			open_compare()
 			compare._zoom = 2.0
 			compare._layout()
-			print("WEB CHECK fur triangles %d" % compare.fox.fur_triangles()))
+			var f: CreatureModel = compare.fox
+			print("WEB CHECK fur layers built: %s (drawn %d triangles from %d)" % [f._fur.mesh != f._fur_source,
+				f._fur.mesh.surface_get_array_index_len(0) / 3, f._fur_source.surface_get_array_index_len(0) / 3]))
 
 
 func _new_session() -> void:
