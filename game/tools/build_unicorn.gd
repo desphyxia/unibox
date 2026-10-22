@@ -5,7 +5,7 @@ extends SceneTree
 ## the tail) and skin weights come from the export, and every clip is written here as bone turns:
 ##   idle (breathing, an ear flick, a swishing tail), walk (a four-beat walk), eat (a nibbling dip of the head), happy (a
 ##   little prance and a toss of the head), hunger (looks up, then sighs), liedown (folds its front legs, then its hind
-##   legs, then curls its neck round to rest), sleep, wake (lying down backward), and the half turns.
+##   legs, then curls its neck round to rest), sleep, wake (lying down backward), yawn, and the half turns.
 ##   godot --headless --path . -s res://tools/build_unicorn.gd
 
 const B := preload("res://tools/creature_builder.gd")
@@ -15,6 +15,7 @@ const TURN_DEG := 100.0
 const CLIPS := {
 	"idle": [2.0, true], "walk": [1.0, true], "eat": [16.0 / 12.0, false], "happy": [16.0 / 14.0, false],
 	"hunger": [20.0 / 12.0, false], "liedown": [20.0 / 12.0, false], "sleep": [16.0 / 12.0, true],
+	"yawn": [20.0 / 12.0, false],
 	"wake": [20.0 / 15.0, false], "turn_r": [13.0 / 22.0, false], "turn_l": [13.0 / 22.0, false],
 	"turn_stand_r": [13.0 / 28.0, false], "turn_stand_l": [13.0 / 28.0, false],
 }
@@ -89,7 +90,7 @@ func _initialize() -> void:
 		"shadows": {"sit": [Vector2(16, 240), Vector2(-16, 240)], "stand": [Vector2(16, 240), Vector2(-16, 240)],
 			"sleep": [Vector2(10, 270), Vector2(-10, 270)]},
 		"walk": {"stride": 77.0, "stance": STANCE}, "eat_drop": Vector2(6, 26), "touch": Vector2(190, 250),
-		"fur": {"root_shade": 0.93, "strand_freq": 130.0, "tuft_freq": 16.0}})
+		"fur": {"root_shade": 0.93, "strand_freq": 130.0, "tuft_freq": 16.0}, "blanket": Vector3(90, 310, 110)})
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
 
@@ -241,6 +242,17 @@ func _frame(tm: float, name: String) -> Dictionary:
 			_add(f, "ear_0", _r(Vector3.RIGHT, 0.15 * look - 0.3 * sigh))
 			_add(f, "ear_1", _r(Vector3.RIGHT, -0.15 * look + 0.3 * sigh))
 			closed = u >= 0.64 and u < 0.76
+		"yawn":
+			# the head tips up and back with a big breath, ears back, eyes shut, then a sleepy sag
+			var up := _win(u, 0.05, 0.4, 0.62, 0.9)
+			var sag := _win(u, 0.62, 0.8, 0.9, 1.0)
+			f["move"]["body"] = Vector3(0, 0.05 * up - 0.03 * sag, 0)
+			_add(f, "neck_1", _r(ACROSS, 0.16 * up - 0.08 * sag))
+			_add(f, "neck_2", _r(ACROSS, 0.12 * up))
+			_add(f, "head", _r(ACROSS, 0.32 * up - 0.1 * sag) * _r(Vector3.RIGHT, 0.06 * up))
+			_add(f, "ear_0", _r(Vector3.RIGHT, -0.35 * up))
+			_add(f, "ear_1", _r(Vector3.RIGHT, 0.35 * up))
+			closed = u >= 0.22 and u < 0.82
 		"liedown", "wake":
 			var v := u if clip == "liedown" else 1.0 - u
 			_lying(f, _ease((v - 0.05) / 0.6), _ease((v - 0.45) / 0.5))

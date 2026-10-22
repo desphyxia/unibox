@@ -8,7 +8,7 @@ extends SceneTree
 ##   - blend shapes: standing, lying like a sphinx, curled up asleep (the sitting fox is the rest shape), and breathing
 ##     (the sitting chest's breath, used awake, and the curled-up one, used asleep);
 ##   - every clip baked from the motion curves the Blender renders used (FoxRig, WalkRig, ReactRig in fox3d.py): idle,
-##     walk, eat, happy, hunger, liedown, sleep, wake, and the half turns sitting and standing from either side;
+##     walk, eat, happy, hunger, liedown, sleep, wake, yawn, and the half turns sitting and standing from either side;
 ##   - places on the fox (the top of the head, the ribbon round the neck and a tail near its tip, where things are worn;
 ##     the mouth; the head's middle), each with the bone that carries it and where it sits in every pose, and the
 ##     head's pivot in each pose and which way it faces, for looking at things;
@@ -29,6 +29,7 @@ const ACROSS := Vector3(0, 0, -1)      ## Blender's y axis: the legs swing about
 const CLIPS := {
 	"idle": [2.0, true], "walk": [1.0, true], "eat": [16.0 / 12.0, false], "happy": [16.0 / 14.0, false],
 	"hunger": [20.0 / 12.0, false], "liedown": [20.0 / 12.0, false], "sleep": [16.0 / 12.0, true],
+	"yawn": [20.0 / 12.0, false],
 	"wake": [20.0 / 15.0, false], "turn_r": [13.0 / 22.0, false], "turn_l": [13.0 / 22.0, false],
 	"turn_stand_r": [13.0 / 28.0, false], "turn_stand_l": [13.0 / 28.0, false],
 }
@@ -99,7 +100,8 @@ func _initialize() -> void:
 			# render pixels (80 to a model unit): [x offset, width] facing right, then facing left
 			"shadows": {"sit": [Vector2(-41, 282), Vector2(-31, 265)], "stand": [Vector2(-4, 201), Vector2(3, 243)],
 				"sleep": [Vector2(30, 194), Vector2(-41, 251)]},
-			"walk": {"stride": 88.0, "stance": 0.6}, "eat_drop": Vector2(-4, 44), "touch": Vector2(165, 250)})
+			"walk": {"stride": 88.0, "stance": 0.6}, "eat_drop": Vector2(-4, 44), "touch": Vector2(165, 250),
+			"blanket": Vector3(60, 300, 100)})       # asleep, render pixels: from behind the head, back this far, this high
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
 
@@ -339,6 +341,12 @@ func _params(clip: String, u: float, sg: float) -> Dictionary:
 				"closed": u >= 0.64 and u < 0.76}, true)
 		"sleep":
 			p.merge({"sway": 0.3, "breath": 0.02 * sin(TAU * u), "closed": true}, true)
+		"yawn":
+			# a big slow breath in with the head tipping back, ears back and eyes shut, then a sleepy sag
+			var up := _win(u, 0.05, 0.4, 0.62, 0.9)
+			var sag := _win(u, 0.62, 0.8, 0.9, 1.0)
+			p.merge({"pitch": d.call(-20) * up + d.call(6) * sag, "roll": d.call(4) * up, "ear": d.call(-14) * up,
+				"breath": 0.06 * up - 0.03 * sag, "closed": u >= 0.22 and u < 0.82, "sway": 1.0 - 0.6 * up}, true)
 		"liedown", "wake":
 			var v := u if clip == "liedown" else 1.0 - u
 			p.merge({"pitch": d.call(7) * _win(v, 0.0, 0.12, 0.24, 0.4), "ear": d.call(-10) * _win(v, 0.1, 0.4, 0.72, 1.0),

@@ -8,6 +8,8 @@ extends Touchable
 ## finger on the meadow (or the apple it carries) while it isn't busy, and wears things from the basket (wardrobe.gd).
 ## A baby grows up (grow_up): from its hatching size to an adult's over a few minutes, with a little moment halfway and
 ## when it is grown. Every creature has its own name (pet_name; the child's first one keeps Game.creature_name).
+## In the evening it yawns as dusk falls; the baby (or the child's only creature) gets sleepy first and curls up at
+## SLEEPY_AT, the others at night. A tap on a sleeping creature tucks it in under a blanket; a second tap wakes it.
 
 signal petted
 signal ate
@@ -21,7 +23,8 @@ const GROUND := Rect2(120, 525, 1808, 205) ## where it may walk (world): the mea
 const MEADOW_AREA := Rect2(120, 525, 784, 205)   ## each place's always-visible ground: it wanders within one
 const POND_AREA := Rect2(1144, 525, 784, 205)
 const LOOPS := ["idle", "walk", "sleep"]
-const CLIP_FRAMES := {"eat": 16, "happy": 16, "hunger": 20, "liedown": 20, "turn_sit": 13, "turn_stand": 13}  ## as rendered
+const CLIP_FRAMES := {"eat": 16, "happy": 16, "hunger": 20, "liedown": 20, "turn_sit": 13, "turn_stand": 13, "yawn": 20}
+const SLEEPY_AT := 18.6                    ## island hour: the baby (or the child's only creature) curls up
 const TAG_ABOVE := 90.0                    ## the name tag's gap above the top of the head (past the ears), render pixels
 
 var temperament := "playful"
@@ -35,6 +38,9 @@ var growing := false                   ## a baby growing up (grow_up)
 var grow_seconds := 180.0
 var grow_age := 0.0
 var _grow := []                        ## [from scale, to scale, from voice, stage reached: 0 baby, 1 young, 2 grown]
+var tucked := false                    ## asleep under a blanket
+var blanket: Blanket
+var _next_sleepy_cue := 0.0
 var shows_needs := true                ## variant A's hunger cue: only the child's first creature shows it
 var follow: Creature = null            ## a baby potters about near this parent
 var home = null                        ## Vector2: stays near here when it wanders (the second adult by the nest)
@@ -92,6 +98,9 @@ func setup(temper: String, world_scale: float, picture_scale := -1.0) -> void:
 	add_child(shadow)
 	add_child(body)
 	body.add_child(squash)
+	blanket = Blanket.new()
+	blanket.creature = self
+	add_child(blanket)
 	# the picture is made at the largest size it is shown (nearest the front of the meadow)
 	look = CreatureView.new(CreatureView.RENDER_PPU * maxf(world_scale, picture_scale) * 1.12 * CreatureView.sharpness)
 	look.model.auto_next = false
@@ -395,6 +404,40 @@ func fall_asleep() -> void:
 	busy = false
 
 
+func yawn() -> void:
+	## a big sleepy yawn (as dusk falls, and over and over when it is getting sleepy)
+	if busy or asleep or turning:
+		return
+	busy = true
+	await play_clip("yawn", 12.0, false, {5: func(): _sfx("yawn", 1.0, 0.05)})
+	busy = false
+
+
+func early_sleeper() -> bool:
+	## the baby goes to bed first: every baby, or the child's first creature while it has none
+	if follow != null:
+		return true
+	return meadow != null and meadow.creature == self and (meadow.breeding == null or meadow.breeding.babies == 0)
+
+
+func sleepy_time() -> bool:
+	## when it goes to sleep: at night, or from SLEEPY_AT for the one that goes first
+	if meadow == null or meadow.time == null:
+		return false
+	var h: float = meadow.time.hour
+	return meadow.time.is_night() or (early_sleeper() and h >= SLEEPY_AT and h < 23.9)
+
+
+func tuck_in() -> void:
+	## a tap on it asleep: a blanket over it, a little sigh of comfort
+	tucked = true
+	blanket.cover()
+	_sfx("sigh", 1.25, 0.05, -6.0)
+	Sfx.play("chime", 1.3, 0.03, -8.0)
+	Fx.hearts(meadow.fx, head_world() + Vector2(0, -20), 2, 30)
+	Log.event("tuck_in", who)
+
+
 func bedtime() -> void:
 	## the child chose night with the moon button: no staying up, it settles down as soon as it is calm
 	_stay_awake_until = 0.0
@@ -405,6 +448,9 @@ func wake() -> void:
 	if not asleep:
 		return
 	busy = true
+	if tucked:
+		tucked = false
+		blanket.uncover()
 	await play_clip("liedown", 15.0, true)
 	asleep = false
 	busy = false
@@ -442,6 +488,9 @@ func pet(p: Vector2) -> void:
 		return
 	target = null
 	if asleep:
+		if not tucked:                       # the first tap tucks it in; the next wakes it
+			tuck_in()
+			return
 		_sfx("chirp", 0.8, 0.05, -4.0)
 		await wake()
 	busy = true
@@ -689,8 +738,8 @@ func _process(delta: float) -> void:
 	shadow.scale = Vector2(sh.y, sh.y * 0.17) / 256.0 * s * (1.0 - clampf(lift / 160.0, 0.0, 0.35))
 	shadow.position = Vector2(sh.x, -4) * s
 	var calm := target == null and not busy and not turning and not _dragging and _clip.is_empty()
-	# bedtime: it dozes off at night and wakes at dawn
-	var night: bool = meadow != null and meadow.time != null and meadow.time.is_night()
+	# bedtime: it dozes off at night (the baby a little earlier) and wakes at dawn
+	var night := sleepy_time()
 	if asleep:
 		if not night and not busy:
 			wake()
@@ -698,6 +747,15 @@ func _process(delta: float) -> void:
 	if night and calm and _age > _stay_awake_until:
 		fall_asleep()
 		return
+	# variant A: getting sleepy before it curls up, it yawns now and then and sleepy z's drift up
+	if Game.variant == "A" and early_sleeper() and calm and meadow and meadow.time and _age >= _next_sleepy_cue:
+		var h: float = meadow.time.hour
+		if h >= 18.0 and h < SLEEPY_AT:
+			_next_sleepy_cue = _age + 7.0
+			Fx.zz(meadow.fx, head_world() + Vector2(20.0 * facing, -40))
+			Log.event("need_cue", "sleepy")
+			yawn()
+			return
 	# idle life: wander a little now and then
 	if calm:
 		_idle_for += delta
@@ -734,6 +792,11 @@ func _process(delta: float) -> void:
 		thirst_cue()
 
 
+func look_up(seconds := 2.5) -> void:
+	## the rain: it looks up at the sky
+	glance(head_world() + Vector2(60.0 * facing, -420), seconds)
+
+
 func _arrive() -> void:
 	if _drink_at != null and position.distance_to(_drink_at) < 14.0:
 		drink()
@@ -751,3 +814,71 @@ func _arrive() -> void:
 	var t := create_tween()
 	t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.08)
 	t.tween_property(self, "squash_v", Vector2.ONE, 0.15)
+
+
+class Blanket:
+	extends Node2D
+	## a patchwork blanket over a sleeping creature, from its tail to just behind its head
+
+	var creature: Creature
+	var amount := 0.0
+	var _tween: Tween
+
+	func _ready() -> void:
+		visible = false
+		z_index = 1
+
+	func cover() -> void:
+		visible = true
+		if _tween:
+			_tween.kill()
+		_tween = create_tween()
+		_tween.tween_property(self, "amount", 1.0, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	func uncover() -> void:
+		if _tween:
+			_tween.kill()
+		_tween = create_tween()
+		_tween.tween_property(self, "amount", 0.0, 0.3)
+		_tween.tween_callback(func(): visible = false)
+
+	func _process(_delta: float) -> void:
+		if visible:
+			queue_redraw()
+
+	func _draw() -> void:
+		if amount <= 0.01:
+			return
+		var s := creature.depth_scale() / 0.5
+		var f := creature.facing
+		var head := creature.head_world() - creature.position
+		var size: Vector3 = creature.look.model.get_meta("blanket", Vector3(60, 300, 100))   # render pixels
+		var ds := creature.depth_scale()
+		var near := head.x - f * size.x * ds         # from just behind the head
+		var far := head.x - f * size.y * ds          # back over the body
+		var x0 := minf(near, far)
+		var x1 := maxf(near, far)
+		var top := -size.z * ds * amount
+		var bottom := 4.0 * s
+		# a soft dome: highest over the middle of the body, tucked down at both ends
+		var edge := PackedVector2Array()
+		for k in 25:
+			var t := k / 24.0
+			var bump := sin(PI * t)
+			edge.append(Vector2(lerpf(x0, x1, t), lerpf(bottom - 6.0 * s, top, pow(bump, 0.4)) + sin(t * 22.0) * 1.5 * s))
+		var pts := edge.duplicate()
+		for k in range(24, -1, -1):
+			var t := k / 24.0
+			pts.append(Vector2(lerpf(x0 - 4.0 * s, x1 + 4.0 * s, t), bottom + sin(PI * t) * 5.0 * s))
+		draw_colored_polygon(pts, Color("f7c6d9"))
+		# patchwork: soft squares in a row along the middle, and white stitches by the edge
+		var cols := [Color("fbe3a8"), Color("c9e4f5"), Color("d9cdf4"), Color("cfeac0")]
+		for i in 4:
+			var t := (i + 0.5) / 4.0
+			var c := Vector2(lerpf(x0, x1, t), lerpf(bottom, top, pow(sin(PI * t), 0.4)) * 0.45)
+			var hw := (x1 - x0) / 11.0
+			draw_rect(Rect2(c - Vector2(hw, hw * 0.8), Vector2(hw * 2.0, hw * 1.6)), Color(cols[i], 0.9), true)
+		draw_polyline(edge, Color("e79bb8"), 3.0 * s, true)
+		for k in range(2, 23, 2):
+			var a := edge[k] + Vector2(0, 6.0 * s)
+			draw_line(a, a + Vector2(5.0 * s, 0), Color(1, 1, 1, 0.85), 1.5, true)

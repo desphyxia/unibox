@@ -5,7 +5,8 @@ extends Node
 var main: Node2D
 var out := "user://autoplay"
 var step := 0
-const FINGER := 4127                       ## Safari gives touches large arbitrary numbers, not 0
+const FINGER := 4127
+const SLEEPY_HOUR := 18.7                  ## a little after Creature.SLEEPY_AT                       ## Safari gives touches large arbitrary numbers, not 0
 
 
 func _ready() -> void:
@@ -142,6 +143,7 @@ func _ready() -> void:
 	await shot("thirst-cue")
 	await until(func(): return not c.busy, 8.0)
 	c.thirsty = false
+	c._thirst_at = c._age + 150.0
 	# things to place: the plant, the lantern and the ball from the basket onto the grass
 	for d in [["plant", Vector2(1290, 640)], ["lantern", Vector2(1880, 600)], ["ball", c.position + Vector2(-260, 30)]]:
 		var from := w(DecorBasket.AT + DecorBasket.ITEMS[d[0]]["spot"] + Vector2(0, -12))
@@ -159,7 +161,10 @@ func _ready() -> void:
 	await wait(0.9)
 	await shot("ball-chase")
 	await wait(2.5)
-	# back to the meadow
+	# back to the meadow: called away from the signpost first (standing in front of it, it would get the tap)
+	await until(func(): return not c.busy, 8.0)
+	await tap(w(Vector2(1500, 700)))
+	await until(func(): return c.target == null and not c.busy, 8.0)
 	await tap(w(Vector2(1104, 550)))
 	await until(func(): return main.area == "meadow" and c.target == null and Creature.area_at(c.position.x) == "meadow", 15.0)
 	await wait(1.4)
@@ -171,18 +176,40 @@ func _ready() -> void:
 	await wait(0.3)
 	await shot("event-log")
 	main.ui._close()
-	main.time.hour = 18.4
-	await wait(0.5)
+	# the afternoon rain (shortened), then the rainbow
+	main.weather.rain_seconds = 5.0
+	main.time.hour = 15.98
+	await until(func(): return main.weather.raining, 5.0)
+	await wait(3.2)
+	await shot("rain")
+	await until(func(): return not main.weather.raining, 10.0)
+	await wait(4.5)
+	print("RAIN done=", main.weather.done, " rainbow=%.2f" % main.weather.rainbow)
+	await shot("rainbow")
+	# dusk: the lanterns light, it yawns; being the only creature it gets sleepy (z's) and curls up early
+	main.time.hour = 18.2
+	await wait(1.6)
 	await shot("dusk")
-	# the sun button hurries on to night; the creature dozes off
+	await wait(1.2)
+	await shot("dusk-yawn")
+	main.time.hour = SLEEPY_HOUR
+	await until(func(): return c.asleep and not c.busy, 12.0)
+	await wait(0.5)
+	await shot("curled-up")
+	# a tap tucks it in; the next would wake it
+	await tap(w(c.position + Vector2(0, -40)))
+	await wait(0.8)
+	print("TUCKED ", c.tucked)
+	await shot("tucked-in")
+	# the sun button hurries on to night
 	await tap(main.sky.position + main.sky.size / 2.0)
 	await wait(1.2)
 	await shot("sky-switching")
 	await wait(1.6)
 	await shot("night")
-	await wait(3.5)
+	await wait(1.5)
 	await shot("asleep")
-	await tap(w(c.position + Vector2(20, -60)))
+	await tap(w(c.position + Vector2(0, -40)))
 	await wait(1.6)
 	await shot("woken")
 	# the moon button brings the morning
