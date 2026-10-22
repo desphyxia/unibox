@@ -40,8 +40,12 @@ bounce and glow. It repeats every 22 seconds until the fox is fed, then comes ba
 happens if it's ignored. At the pond it gets thirsty a little while after it
 arrives: it looks at the water and sighs, and the water glints, until it has a drink. Variant B shows no cues.
 
-Island time runs from dawn to dusk in about ten minutes, then has a short night. At night the fox dozes off and
-sleeps until dawn; a tap wakes it. The sun or moon in the top-left corner switches between day and night.
+Island time runs from dawn to dusk in about ten minutes, then has a short night. Around minute 8 a soft rain shower
+passes (the light dims, drops ripple the pond, the creatures look up), and a rainbow follows it. As dusk falls the
+lanterns light and every creature yawns; the baby (or the child's creature, while it has none) gets sleepy first and
+curls up a little after 18:30 island time, the others at 20:00. In variant A the sleepy one yawns now and then and
+sleepy z's drift up before it curls up. A tap on a sleeping creature tucks it in under a patchwork blanket; the next
+tap wakes it. Everyone wakes at dawn. The sun or moon in the top-left corner switches between day and night.
 
 ## For the facilitator
 Press and hold the dots in the top-right corner, answer the grown-ups question, and the parent area opens. In it:

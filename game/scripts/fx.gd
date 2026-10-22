@@ -54,6 +54,30 @@ static func sparkles(parent: Node, pos: Vector2, n := 8, radius := 70.0, color :
 		t.chain().tween_callback(s.queue_free)
 
 
+static func zz(parent: Node, pos: Vector2, color := Color(0.55, 0.5, 0.85, 0.9)) -> void:
+	## sleepy z's drifting up and away
+	for i in 3:
+		var z := Line2D.new()
+		var k := 7.0 + i * 3.0
+		z.points = PackedVector2Array([Vector2(-k, -k), Vector2(k, -k), Vector2(-k, k), Vector2(k, k)])
+		z.width = 3.0
+		z.default_color = color
+		z.joint_mode = Line2D.LINE_JOINT_ROUND
+		z.begin_cap_mode = Line2D.LINE_CAP_ROUND
+		z.end_cap_mode = Line2D.LINE_CAP_ROUND
+		z.position = pos
+		z.scale = Vector2.ONE * 0.2
+		z.modulate.a = 0.0
+		parent.add_child(z)
+		var t := z.create_tween()
+		t.tween_interval(i * 0.45)
+		t.tween_property(z, "modulate:a", 1.0, 0.2)
+		t.parallel().tween_property(z, "scale", Vector2.ONE, 0.5)
+		t.parallel().tween_property(z, "position", pos + Vector2(26 + i * 14, -60 - i * 28), 1.6).set_trans(Tween.TRANS_SINE)
+		t.parallel().tween_property(z, "modulate:a", 0.0, 0.6).set_delay(1.0)
+		t.tween_callback(z.queue_free)
+
+
 static func flash(parent: Node, pos: Vector2, color := Color(1, 0.98, 0.9, 0.95), size := 3.0) -> void:
 	var s := Sprite2D.new()
 	s.texture = glow_texture(color, 256)

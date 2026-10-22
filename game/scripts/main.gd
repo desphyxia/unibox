@@ -40,6 +40,7 @@ var finger = null                           ## Vector2: where that finger is on 
 var wardrobe: Wardrobe                      ## the basket of things to wear
 var pond: Pond
 var decor: DecorBasket                      ## the basket of things to place, at the pond
+var weather: Weather                        ## the one rain shower, and the rainbow after it
 var area := "meadow"                        ## the place in view
 var pan := 0.0                              ## how far east the view has slid (0 the meadow, 1024 the pond)
 var _pan_tween: Tween
@@ -62,6 +63,10 @@ func _ready() -> void:
 	sky = SkyButton.new()
 	sky.time = time
 	sky_layer.add_child(sky)
+	time.dusk.connect(func():
+		# dusk: everyone yawns, one after another
+		for c in creatures:
+			get_tree().create_timer(randf_range(0.2, 3.5)).timeout.connect(func(): if is_instance_valid(c): c.yawn()))
 	time.switched.connect(func(night: bool):
 		if night:
 			for c in creatures:
@@ -155,6 +160,25 @@ func _build_world() -> void:
 	decor = DecorBasket.new()
 	decor.meadow = self
 	world.add_child(decor)
+	# two lanterns in the meadow, which glow from dusk
+	for at in [Vector2(372, 548), Vector2(836, 552)]:
+		var l := Lantern.new()
+		l.meadow = self
+		l.position = at
+		world.add_child(l)
+	weather = Weather.new()
+	weather.meadow = self
+	world.add_child(weather)
+	weather.rain_started.connect(func():
+		for c in creatures:
+			if is_instance_valid(c) and not c.asleep:
+				c.look_up()
+				get_tree().create_timer(randf_range(0.3, 1.2)).timeout.connect(func(): if is_instance_valid(c) and not c.busy and not c.asleep: c.pet(c.head_world())))
+	weather.rain_stopped.connect(func():
+		get_tree().create_timer(3.5).timeout.connect(func():
+			for c in creatures:
+				if is_instance_valid(c) and not c.asleep:
+					c.look_up(3.0)))
 	fx.z_index = 60
 	world.add_child(fx)
 	overlay.z_index = 80

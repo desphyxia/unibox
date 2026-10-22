@@ -24,6 +24,7 @@ var stars := Node2D.new()
 var _dusk_sent := false
 var _skip := {}                        ## a quick run of the clock to night or morning: from, to, t, secs
 var view_x := 0.0                      ## main.gd: how far east the view has slid (0 the meadow, 1024 the pond)
+var weather_dim := Color.WHITE         ## weather.gd: the light under rain clouds
 
 
 func _ready() -> void:
@@ -107,7 +108,7 @@ func _process(delta: float) -> void:
 	if hour >= 5.0 and hour < 6.0:
 		_dusk_sent = false
 	if tint:
-		tint.color = tint_at(hour)
+		tint.color = tint_at(hour) * weather_dim
 	stars.position.x = view_x                  # the sky goes with the view: the sun, moon and stars over either place
 	sun.position = _arc(hour, 5.6, 19.4) + Vector2(view_x, 0)
 	sun.scale = Vector2.ONE * 1.1

@@ -1,5 +1,5 @@
 """Stand-in sound effects for the playable prototype, synthesised from code (no recordings): creature chirps, egg knocks
-and cracks, a hatch chime, pick-up and drop pops, munching, a sigh, sparkles, water (splash, slurp, bloop). Soft and
+and cracks, a hatch chime, pick-up and drop pops, munching, a sigh, sparkles, water (splash, slurp, bloop), a yawn and soft rain. Soft and
 short, for small ears.
 Usage: python sfx.py OUT_DIR"""
 import os, sys, wave
@@ -108,3 +108,26 @@ spl = lowpass(noise(0.45), 0.18) * env(int(SR * 0.45), 0.005, 0.4, 2.2)
 save("splash", mix((0, spl), *[(0.05 + 0.06 * i + rng.uniform(0, 0.03), bubble(rng.uniform(500, 900), 0.06) * 0.5) for i in range(5)]), 0.4)
 save("slurp", mix(*[(0.09 * i, bubble(f, 0.07)) for i, f in enumerate((380, 460, 420))], (0, lowpass(noise(0.3), 0.08) * env(int(SR * 0.3), 0.02, 0.25) * 0.4)), 0.34)
 save("bloop", bubble(520, 0.12), 0.3)
+
+# the evening: a sleepy yawn (a breath in rising, then a long sigh falling), and soft rain (a seamless 4 s loop)
+yb = glide(300, 520, 0.55, (1.0, 0.25, 0.08)) * env(int(SR * 0.55), 0.18, 0.2, 1.2)
+yf = glide(520, 260, 0.9, (1.0, 0.2)) * env(int(SR * 0.9), 0.05, 0.8, 1.3)
+breath = lowpass(noise(1.45), 0.1) * env(int(SR * 1.45), 0.3, 0.9, 1.2) * 0.35
+save("yawn", mix((0, yb * 0.6), (0.5, yf * 0.55), (0, breath)), 0.3)
+L = 4.0
+n = int(SR * L)
+hiss = lowpass(noise(L + 0.5), 0.25)[:n] * 0.25
+drops = np.zeros(n)
+for _ in range(220):
+    at = rng.integers(0, n - int(SR * 0.05))
+    d = bubble(rng.uniform(1400, 3200), 0.03) * rng.uniform(0.15, 0.5)
+    drops[at:at + len(d)] += d
+rain = hiss + drops
+fade = int(SR * 0.5)                                       # seamless: the end blends into the start
+rain[:fade] = rain[:fade] * np.linspace(0, 1, fade) + rain[-fade:] * np.linspace(1, 0, fade)
+rain = rain[:-fade]
+x = rain / (np.max(np.abs(rain)) + 1e-9) * 0.28
+with wave.open(os.path.join(OUT, "rain.wav"), "wb") as w:   # no fade at the end: it loops
+    w.setnchannels(1), w.setsampwidth(2), w.setframerate(SR)
+    w.writeframes((x * 32767).astype(np.int16).tobytes())
+print("wrote rain", f"{len(x) / SR:.2f}s")
