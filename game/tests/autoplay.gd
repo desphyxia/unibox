@@ -178,6 +178,15 @@ func _ready() -> void:
 	await wait(0.4)
 	await shot("compare-colours")
 	print("COMPARE ", main.compare._fps.text)
+	# the speed test, shortened
+	main.compare.test_seconds = 0.8
+	main.compare.speed_test()
+	await until(func(): return main.compare._status.begins_with("Speed test 8"), 30.0)
+	await wait(0.9)
+	await shot("compare-crowd")
+	await until(func(): return not main.compare._testing, 30.0)
+	await wait(0.3)
+	await shot("compare-speed")
 	main.compare.close()
 	await wait(0.3)
 	print("AUTOPLAY DONE log=", ProjectSettings.globalize_path(Log.path))

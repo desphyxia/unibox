@@ -44,9 +44,16 @@ The parent area's **Compare** button opens the fox two ways over the meadow: on 
 uses now, on the right the same model drawn live in 3D with shell fur (`live_fox.gd`, `fox_live.gdshader`,
 `fox_fur.gdshader`, `fox_rig.gdshaderinc`; the model is exported by `art/generators/fox_live_export.py`). Buttons: every
 clip (idle, walk, eat, happy, hungry, lie down, wake up, turn; both foxes play it together), spin (or drag the live
-fox), close-up, fur layers 6/8/12, colours (both recolour), back. The corner shows frames per second and the live
-fox's triangles (about 48 thousand with 8 fur layers). The live fox blends four exported poses (sit, stand, sphinx,
-curled up) and computes each clip from the same motion curves as the renders.
+fox), close-up, fur layers 4/6/8/12/off, colours (both recolour), speed test, back. The corner shows frames per
+second and the live fox's triangles (about 48 thousand with 8 fur layers). The live fox blends four exported poses
+(sit, stand, sphinx, curled up) and computes each clip from the same motion curves as the renders. The 3D is drawn only
+in a box round the live foxes, not over the whole screen.
+
+**Speed test** runs eight set-ups for about five seconds each, with the foxes walking: no 3D fox, one fox with no fur,
+6 fur layers, 6 layers with the 3D over the whole screen, 6 layers without edge smoothing, then five foxes (two adults,
+three babies, as in the game) with no fur, 4 layers with 2x smoothing, and 6 layers. It then lists the frames a
+second, the slowest frame and the share of frames slower than 20 ms for each, and writes the same to the event log.
+A browser never goes above the screen's 60 frames a second, so set-ups that reach 60 show only that they fit.
 
 ## Stand-ins
 - Rendered: the sitting idle loop, a walk cycle, eating, a happy wiggle, the hunger look and sigh, lying down to
