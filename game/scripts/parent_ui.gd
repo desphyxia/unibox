@@ -227,6 +227,11 @@ func open_panel() -> void:
 	for v in [["A", "A: visible needs"], ["B", "B: no visible needs"]]:
 		var b := _button(r1, v[1], func(): _apply_setting("variant", v[0]), Game.variant == v[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_label(box, "Creature (from the next session)", 18)
+	var rk := _row(box)
+	for k in [["fox", "Fox"], ["unicorn", "Unicorn"]]:
+		var b := _button(rk, k[1], func(): _apply_setting("kind", k[0]), Game.kind == k[0])
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_label(box, "Temperament", 18)
 	var r2 := _row(box)
 	for t in Game.TEMPERAMENTS:
@@ -240,12 +245,12 @@ func open_panel() -> void:
 			time_speed_changed.emit(_time_speed)
 			open_panel(), is_equal_approx(_time_speed, s[0]))
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var sf := _button(box, "Bring the second fox now (it comes by itself about 4 min after the hatch)", func():
+	var sf := _button(box, "Bring the second %s now (it comes by itself about 4 min after the hatch)" % Game.kind, func():
 		_close()
 		Log.event("setting", "second_fox=now")
 		second_fox_requested.emit())
 	sf.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_button(box, "3D fox check and speed test", func():
+	_button(box, "3D creature check and speed test", func():
 		_close()
 		compare_requested.emit())
 	var r4 := _row(box)

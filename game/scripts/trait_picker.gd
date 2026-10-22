@@ -12,7 +12,7 @@ const CHIP_R := 44.0
 var parents: Array = []                ## [Creature, Creature]: left and right
 var pick := {"coat": 0, "glow": 1}     ## which parent each trait comes from: one from each to start with
 var root := Control.new()
-var _baby := FoxView.new(34.0)         ## live foxes, like the ones in the meadow
+var _baby := CreatureView.new(34.0)         ## live foxes, like the ones in the meadow
 var _shown: Array = []                 ## the parents
 var _chips := []                       ## [type, parent index, centre, radius]
 var _tick := Vector2.ZERO
@@ -34,13 +34,13 @@ func _ready() -> void:
 	root.draw.connect(_draw_root)
 	add_child(root)
 	for i in 2:
-		var s := FoxView.new(36.0)
-		s.fox.facing = 1.0 if i == 0 else -1.0     ## both face the baby
-		s.fox.shells = 4
-		s.fox.set_traits(parents[i].traits)
+		var s := CreatureView.new(36.0)
+		s.model.facing = 1.0 if i == 0 else -1.0     ## both face the baby
+		s.model.shells = 4
+		s.model.set_traits(parents[i].traits)
 		root.add_child(s)
 		_shown.append(s)
-	_baby.fox.shells = 4
+	_baby.model.shells = 4
 	root.add_child(_baby)
 	_update_baby()
 	get_viewport().size_changed.connect(_layout)
@@ -78,7 +78,7 @@ func baby_traits() -> Dictionary:
 
 
 func _update_baby() -> void:
-	_baby.fox.set_traits(baby_traits())
+	_baby.model.set_traits(baby_traits())
 
 
 # ------------------------------------------------------------------ touch (from main.gd)
@@ -186,6 +186,8 @@ func _draw_root() -> void:
 			root.draw_circle(at, r + 4.0 * u, Color(INK, 0.14), true, -1.0, true)
 		if type == "coat":
 			_fluff(at, r, col)
+		elif Game.kind == "unicorn":
+			_lock(at, r, col)
 		else:
 			_flame(at, r, col)
 		if on:          # a little tick badge on the chosen one
@@ -219,6 +221,17 @@ func _fluff(at: Vector2, r: float, col: Color) -> void:
 		root.draw_circle(at + Vector2(cos(a), sin(a)) * r * 0.66, r * 0.34, col.darkened(0.06), true, -1.0, true)
 	root.draw_circle(at, r * 0.72, col, true, -1.0, true)
 	root.draw_circle(at + Vector2(-0.22, -0.26) * r, r * 0.32, col.lightened(0.28), true, -1.0, true)
+
+
+func _lock(at: Vector2, r: float, col: Color) -> void:
+	## a curl of mane in the mane colour
+	var pts := PackedVector2Array()
+	for k in 24:
+		var t := k / 23.0
+		pts.append(at + Vector2(-0.35 + 0.5 * sin(t * PI * 1.3), -0.75 + 1.4 * t) * r)
+	root.draw_polyline(pts, col, r * 0.42, true)
+	root.draw_circle(pts[pts.size() - 1] + Vector2(0.1, -0.05) * r, r * 0.24, col, true, -1.0, true)
+	root.draw_polyline(pts.slice(2, 14), col.lightened(0.45), r * 0.1, true)
 
 
 func _flame(at: Vector2, r: float, col: Color) -> void:

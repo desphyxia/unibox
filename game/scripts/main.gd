@@ -71,7 +71,7 @@ func _ready() -> void:
 func _warm_up() -> void:
 	## a tiny fox drawn out of sight for a moment: the model loads and the 3D shaders are built now, while the egg waits,
 	## not with a stutter when it hatches
-	var warm := FoxView.new(4.0)
+	var warm := CreatureView.new(4.0)
 	warm.position = Vector2(-5000, -5000)
 	add_child(warm)
 	get_tree().create_timer(0.6).timeout.connect(warm.queue_free)
@@ -200,7 +200,7 @@ func open_picker(parents: Array, done: Callable) -> void:
 
 
 func _on_hatched(at: Vector2) -> void:
-	creature = spawn_creature(Traits.DEFAULT, 1.0, at + Vector2(0, 24), Game.temperament)
+	creature = spawn_creature(Traits.defaults(), 1.0, at + Vector2(0, 24), Game.temperament)
 	_selected = creature
 	creature.appear(at + Vector2(0, 24))
 	breeding.start()

@@ -14,7 +14,7 @@ void vertex() {
 	}
 	emit = CUSTOM1.y;
 	surf = CUSTOM1.z;
-	col = trait_colour(COLOR.rgb);
+	col = trait_colour(COLOR.rgb, CUSTOM3.x);
 }
 
 void fragment() {

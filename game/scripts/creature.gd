@@ -1,6 +1,6 @@
 class_name Creature
 extends Touchable
-## A creature in the meadow, drawn as a live 3D fox (fox_view.gd): an idle loop when sitting, a walk cycle when moving,
+## A creature in the meadow, drawn as a live 3D model (creature_view.gd; a fox or a unicorn): an idle loop when sitting, a walk cycle when moving,
 ## and one-shot clips for eating, being petted (happy), the hunger cue, lying down to sleep, sleeping, waking and
 ## turning round (half way, sitting or standing, from one side's view to the other's). The clips keep the timings the
 ## rendered frames had, and their events (bites, the sigh) still count in those frames.
@@ -12,27 +12,17 @@ signal ate
 signal clip_finished
 signal arrived                         ## a walk ended (dragged, called or wandering)
 
-## Points on the sitting fox, in the Blender renders' pixels (640-wide frames, facing right): the live fox is drawn at
-## the same scale and camera. The creature's origin is the fox's ground point (RENDER_ANCHOR in those frames).
-const RENDER_ANCHOR := Vector2(338.38, 502.22)
-const FEET_R := Vector2(297, 517)
-const MOUTH_R := Vector2(437, 222)
-const EAT_DROP := Vector2(-4, 44)          ## how far the mouth moves when the head dips to eat, render pixels
-const HEAD_R := Vector2(387, 196)
-const TOP_R := 61.0
+## Its points (head, mouth, the top of its head) come from the model's places, wherever the clip has put them; its
+## shadow, walk stride, eating dip and size to touch come with the model too (render pixels, 80 to a model unit).
 const WALK_SPEED := 120.0
 const GROUND := Rect2(120, 525, 784, 205)  ## where it may walk (world), inside the always-visible area
 const LOOPS := ["idle", "walk", "sleep"]
 const CLIP_FRAMES := {"eat": 16, "happy": 16, "hunger": 20, "liedown": 20, "turn_sit": 13, "turn_stand": 13}  ## as rendered
-const WALK_STRIDE := 88.0                  ## render pixels a paw travels per walk cycle
-const WALK_STANCE := 0.6                   ## the share of the cycle a paw is on the ground
-## the shadow under each pose, render pixels: [x offset, width] facing right, then facing left
-const SHADOWS := {"sit": [Vector2(-41, 282), Vector2(-31, 265)], "stand": [Vector2(-4, 201), Vector2(3, 243)],
-	"sleep": [Vector2(30, 194), Vector2(-41, 251)]}
+const TAG_ABOVE := 90.0                    ## the name tag's gap above the top of the head (past the ears), render pixels
 
 var temperament := "playful"
 var base_scale := 0.5
-var traits := Traits.DEFAULT.duplicate()  ## coat and glow colours (the live fox's shaders recolour it)
+var traits := Traits.defaults()           ## coat and glow colours (the model's shaders recolour it)
 var voice := 1.0                       ## pitch of its sounds: babies squeak higher
 var shows_needs := true                ## variant A's hunger cue: only the child's first creature shows it
 var follow: Creature = null            ## a baby potters about near this parent
@@ -42,7 +32,7 @@ var worn := {}                         ## place -> the id of what it wears there
 
 var body := Node2D.new()               ## lift and tilt, pivot at the feet
 var squash := Node2D.new()             ## squash and stretch, times the depth scale
-var look: FoxView                      ## the live fox, in render pixels round its ground point
+var look: CreatureView                      ## the live fox, in render pixels round its ground point
 var shadow := Sprite2D.new()
 
 var lift := 0.0                        ## animated by tweens
@@ -51,7 +41,6 @@ var squash_v := Vector2.ONE
 var facing := 1.0
 
 var _anim := "idle"                    ## the loop or clip playing (turn_sit, turn_stand; liedown also when waking)
-var _ref := FEET_R - RENDER_ANCHOR     ## from the ground point to the sitting fox's feet, render pixels
 var target = null                      ## Vector2 to walk to, or null
 var speed_factor := 1.0
 var busy := false                      ## reacting or eating: stands still
@@ -85,19 +74,19 @@ func setup(temper: String, world_scale: float) -> void:
 	add_child(body)
 	body.add_child(squash)
 	# the picture is made at the largest size it is shown (nearest the front of the meadow)
-	look = FoxView.new(FoxView.RENDER_PPU * world_scale * 1.12 * FoxView.sharpness)
-	look.fox.auto_next = false
-	look.fox.shells = 6 if world_scale >= 0.45 else 4   ## small foxes (babies) need fewer fur layers
-	look.fox.facing = facing
+	look = CreatureView.new(CreatureView.RENDER_PPU * world_scale * 1.12 * CreatureView.sharpness)
+	look.model.auto_next = false
+	look.model.shells = 6 if world_scale >= 0.45 else 4   ## small foxes (babies) need fewer fur layers
+	look.model.facing = facing
 	squash.add_child(look)
 	_play("idle")
-	look.fox.random_start = true              ## not every fox breathing in step
+	look.model.random_start = true              ## not every fox breathing in step
 	_next_wander = _wander_gap()
 
 
 func set_traits(t: Dictionary) -> void:
 	traits = t.duplicate()
-	look.fox.set_traits(traits)
+	look.model.set_traits(traits)
 
 
 func _sfx(id: String, pitch := 1.0, vary := 0.06, db := 0.0) -> void:
@@ -109,37 +98,38 @@ func depth_scale() -> float:
 	return base_scale * lerpf(0.86, 1.12, clampf(inverse_lerp(GROUND.position.y, GROUND.end.y, position.y), 0.0, 1.0))
 
 
-func _at(r: Vector2) -> Vector2:
-	## a point on the sitting fox (render pixels) in the meadow, for the way it faces now
-	var d := r - FEET_R + _ref
-	return position + Vector2(d.x * facing, d.y) * depth_scale() + Vector2(0, -lift)
+func _point(place: String, otherwise: Vector2) -> Vector2:
+	## a place on the model (its own space) in the meadow; `otherwise` (render pixels from the feet) until it is drawn
+	if not look or not look.model.is_inside_tree():
+		return position + Vector2(otherwise.x * facing, otherwise.y) * depth_scale()
+	var g := look.to_global(look.to_picture(look.model.point(place)))
+	return meadow.world.to_local(g) if meadow else g
+
+
+func _info(key: String, otherwise):
+	return look.model.get_meta(key, otherwise) if look else otherwise
 
 
 func head_world() -> Vector2:
-	return _at(HEAD_R)
+	return _point("middle", Vector2(50, -320))
 
 
 func mouth_world() -> Vector2:
-	return _at(MOUTH_R)
+	return _point("mouth", Vector2(100, -280))
 
 
 func top_world() -> Vector2:
-	## curled up asleep the head is much lower; while lying down or getting up the tag follows it down or up
-	var curled := 0.0
-	if asleep and _anim == "sleep":
-		curled = 190.0
-	elif _anim == "liedown":
-		var u := look.fox.progress()
-		curled = 190.0 * smoothstep(0.0, 1.0, u if look.fox.clip == "liedown" else 1.0 - u)
-	return position + Vector2(0, (TOP_R + curled - FEET_R.y + _ref.y) * depth_scale() - lift)
+	## above the top of the head (and its ears), wherever the clip has it: lying down, the tag comes down with it
+	return _point("head", Vector2(0, -440)) - Vector2(0, TAG_ABOVE * depth_scale())
 
 
 func hit_test(p: Vector2) -> bool:
+	## an oval from the feet to the top of the head
 	var s := depth_scale()
-	var c := position + Vector2((10 + _ref.x) * facing, -235 + _ref.y) * s
-	if asleep:
-		c = position + Vector2((40 + _ref.x) * facing, -110 + _ref.y) * s
-	var d := (p - c) / (Vector2(165, 250 if not asleep else 140) * s)
+	var top := _point("head", Vector2(0, -440))
+	var c := (position + top) / 2.0
+	var touch: Vector2 = _info("touch", Vector2(165, 250))
+	var d := (p - c) / Vector2(touch.x * s, maxf((position.y - top.y) / 2.0 + 30.0 * s, 70.0 * s))
 	return d.length() <= 1.0
 
 
@@ -149,7 +139,7 @@ func wear(id: String) -> String:
 	var place: String = Wardrobe.ITEMS[id]["place"]
 	var old: String = worn.get(place, "")
 	worn[place] = id
-	look.fox.wear(place, Wardrobe.model(id, look.fox.place_size(place)))
+	look.model.wear(place, Wardrobe.model(id, look.model.place_size(place)))
 	Log.event("item_worn", id)
 	_sfx("chirp2", 1.1)
 	Fx.sparkles(meadow.fx, worn_at(place), 6, 40)
@@ -158,24 +148,24 @@ func wear(id: String) -> String:
 
 func take_off(place: String) -> void:
 	worn.erase(place)
-	look.fox.take_off(place)
+	look.model.take_off(place)
 
 
 func worn_at(place: String) -> Vector2:
 	## where the place is on screen now, in meadow coordinates
-	var g := look.to_global(look.to_picture(look.fox.worn_point(place)))
+	var g := look.to_global(look.to_picture(look.model.worn_point(place)))
 	return meadow.world.to_local(g) if meadow else g
 
 
 func _look_around() -> void:
 	## look at a finger on the meadow (or what it carries) while awake and not busy with a clip
-	if not look.fox.look:
+	if not look.model.look:
 		return
 	var f = meadow.finger if meadow else null
 	var on := f != null and not asleep and _clip.is_empty() and (f as Vector2).distance_to(head_world()) < 700.0
 	if on:
 		look.look_toward(look.to_local(meadow.world.to_global(f)))
-	look.fox.look.looking = on
+	look.model.look.looking = on
 
 
 # ------------------------------------------------------------------ touch
@@ -216,8 +206,8 @@ func _begin(anim: String, fps: float, events := {}, face := 0.0, reverse := fals
 	if reverse and anim == "liedown":
 		live = "wake"
 	var dur: float = CLIP_FRAMES[anim] / fps
-	look.fox.speed = 1.0
-	look.fox.play(live, dur)
+	look.model.speed = 1.0
+	look.model.play(live, dur)
 	_anim = anim
 	_clip = {"t": 0.0, "dur": dur, "fps": fps, "frames": CLIP_FRAMES[anim], "fired": 0, "events": events, "face": face}
 	if events.has(0):
@@ -245,7 +235,7 @@ func _step_clip(delta: float) -> void:
 		_clip = {}
 		if face != 0.0:
 			facing = face
-			look.fox.facing = face
+			look.model.facing = face
 		clip_finished.emit()
 		# nothing chained another clip: back to the right loop
 		if _clip.is_empty() and (face != 0.0 or not LOOPS.has(_anim)):
@@ -380,7 +370,8 @@ func fetch(apple: Node2D) -> void:
 		await wake()
 	food_target = apple
 	face_toward(apple.position.x)
-	walk_to(apple.position + Vector2(-(MOUTH_R.x - FEET_R.x + _ref.x) * depth_scale() * signf(apple.position.x - position.x + 0.01), 6), 1.2)
+	var reach := absf(mouth_world().x - position.x)            # stand so the mouth is over it
+	walk_to(apple.position + Vector2(-reach * signf(apple.position.x - position.x + 0.01), 6), 1.2)
 
 
 func eat(apple: Node2D, how: String) -> void:
@@ -402,7 +393,8 @@ func eat(apple: Node2D, how: String) -> void:
 		busy = false
 		return
 	var s := depth_scale()
-	var mouth_down := mouth_world() + Vector2(EAT_DROP.x * facing, EAT_DROP.y) * s
+	var drop: Vector2 = _info("eat_drop", Vector2(-4, 44))   # how far the mouth dips to eat
+	var mouth_down := mouth_world() + Vector2(drop.x * facing, drop.y) * s
 	var t := create_tween()
 	_react_tween = t
 	t.tween_property(apple, "global_position", meadow.world.to_global(mouth_down), 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
@@ -461,8 +453,8 @@ func appear(from: Vector2, hop := Vector2(120, 50)) -> void:
 func _play(anim: String, quiet := false) -> void:
 	## start a loop; a small squash softens the change from walking to sitting
 	_anim = anim
-	look.fox.speed = 1.0
-	look.fox.play(anim)
+	look.model.speed = 1.0
+	look.model.play(anim)
 	if anim == "idle" and not busy and not quiet:
 		var t := create_tween()
 		t.tween_property(self, "squash_v", Vector2(1.05, 0.95), 0.07)
@@ -506,7 +498,8 @@ func _process(delta: float) -> void:
 				_play("walk")
 			# cycles per second so a paw on the ground keeps pace with the meadow
 			var v := WALK_SPEED * speed_factor
-			look.fox.speed = clampf(WALK_STANCE * v / (WALK_STRIDE * depth_scale()), 0.4, 3.0)
+			var walk: Dictionary = _info("walk", {"stride": 88.0, "stance": 0.6})
+			look.model.speed = clampf(walk["stance"] * v / (walk["stride"] * depth_scale()), 0.4, 3.0)
 		else:
 			_still_for += delta
 			if _anim == "walk" and _still_for > 0.12 and target == null:
@@ -515,12 +508,15 @@ func _process(delta: float) -> void:
 	body.position.y = -lift
 	body.rotation = tilt
 	squash.scale = squash_v * s
-	look.fox.facing = facing                  # a turn changes facing only as it ends
+	look.model.facing = facing                  # a turn changes facing only as it ends
 	_look_around()
 	# the shadow follows the pose: sitting (or lying like a sphinx), standing, curled up
-	var w := look.fox.pose_weights()
+	var w := look.model.pose_weights()
 	var side := 0 if facing > 0 else 1
-	var sh: Vector2 = SHADOWS["sit"][side] * (w.x + w.z) + SHADOWS["stand"][side] * w.y + SHADOWS["sleep"][side] * w.w
+	var shadows: Dictionary = _info("shadows", {})
+	var sh := Vector2(0, 220)
+	if not shadows.is_empty():
+		sh = shadows["sit"][side] * (w.x + w.z) + shadows["stand"][side] * w.y + shadows["sleep"][side] * w.w
 	shadow.scale = Vector2(sh.y, sh.y * 0.17) / 256.0 * s * (1.0 - clampf(lift / 160.0, 0.0, 0.35))
 	shadow.position = Vector2(sh.x, -4) * s
 	var calm := target == null and not busy and not turning and not _dragging and _clip.is_empty()

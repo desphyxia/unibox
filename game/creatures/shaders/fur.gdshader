@@ -23,7 +23,7 @@ void vertex() {
 	h = CUSTOM2.w;
 	tip = COLOR.a;
 	glow = CUSTOM1.x;
-	base = trait_colour(COLOR.rgb);
+	base = trait_colour(COLOR.rgb, CUSTOM3.x);
 	fur_len = length(vec2(CUSTOM0.z, CUSTOM1.w));   // the fur's length outward and along the surface
 }
 

@@ -1,13 +1,15 @@
 class_name Traits
-## The traits a creature can inherit, in the first session two of them: coat colour and glow colour (tail tips and
-## foxfire). Both are made by the live fox's shaders recolouring its model's colours (trait_colour in
-## creatures/shaders/creature.gdshaderinc), so a new colour costs no download. A baby takes each trait from one of its parents,
-## as the child chooses.
+## The traits a creature can inherit, in the first session two of them: its coat colour and its glow colour (the fox's
+## tail tips and foxfire; the unicorn's mane and tail). The creature shaders recolour the model's own colours
+## (trait_colour in creatures/shaders/creature.gdshaderinc), so a new colour costs no download:
+##   the fox by hue (its apricot coat and its pink-violet glow get new colours);
+##   the unicorn by part (each vertex says whether it is coat or mane; that part takes the new colour's hue).
+## A baby takes each trait from one of its parents, as the child chooses. The kind is Game.kind unless given.
 
-const BASE_COAT := Color("ffa877")             ## the rendered apricot, the mid tone of the coat
+const BASE_COAT := Color("ffa877")             ## the fox's rendered apricot, the mid tone of its coat
 const BASE_GLOW := Color("f2a0e6")
 
-## coat: hue turn (degrees), saturation and brightness factors
+## fox coat: hue turn (degrees), saturation and brightness factors
 const COATS := {
 	"apricot": [0.0, 1.0, 1.0],
 	"lilac": [255.0, 0.75, 1.0],
@@ -18,7 +20,7 @@ const COATS := {
 	"cocoa": [8.0, 0.75, 0.72],
 	"gold": [25.0, 1.15, 1.05],
 }
-## glow: new hue (degrees, below 0 keeps the rendered pink) and a saturation factor
+## fox glow: new hue (degrees, below 0 keeps the rendered pink) and a saturation factor
 const GLOWS := {
 	"pink": [-1.0, 1.0],
 	"blue": [205.0, 1.4],
@@ -26,12 +28,55 @@ const GLOWS := {
 	"green": [140.0, 1.3],
 	"violet": [270.0, 1.3],
 }
+## unicorn coat and mane: new hue (degrees; below 0 keeps the model's own colours), added saturation, brightness factor
+const UNICORN_COATS := {
+	"pearl": [-1.0, 0.0, 1.0],
+	"rose": [340.0, 0.22, 1.0],
+	"mint": [150.0, 0.2, 1.0],
+	"lilac": [270.0, 0.22, 1.0],
+	"sky": [205.0, 0.24, 1.0],
+	"peach": [22.0, 0.26, 1.0],
+	"butter": [50.0, 0.28, 1.0],
+	"storm": [235.0, 0.14, 0.72],
+}
+const UNICORN_MANES := {
+	"candy": [-1.0, 0.0, 1.0],
+	"sunset": [22.0, 0.25, 1.0],
+	"ocean": [200.0, 0.2, 0.95],
+	"meadow": [115.0, 0.15, 0.92],
+	"midnight": [255.0, 0.3, 0.72],
+	"gold": [45.0, 0.3, 1.0],
+}
+const UNICORN_BASE_COAT := Color("e6f2f8")     ## the unicorn's own pearly coat and candy mane, for the picker's buttons
+const UNICORN_BASE_MANE := Color("f6b3cf")
 const TYPES := ["coat", "glow"]
 const DEFAULT := {"coat": "apricot", "glow": "pink"}
+const DEFAULTS := {"fox": {"coat": "apricot", "glow": "pink"}, "unicorn": {"coat": "pearl", "glow": "candy"}}
 
 
-static func swatch(type: String, value: String) -> Color:
+static func _kind(kind: String) -> String:
+	return kind if kind != "" else Game.kind
+
+
+static func defaults(kind := "") -> Dictionary:
+	return DEFAULTS.get(_kind(kind), DEFAULT).duplicate()
+
+
+static func values(type: String, kind := "") -> Dictionary:
+	## every value a trait can take, for this kind
+	if _kind(kind) == "unicorn":
+		return UNICORN_COATS if type == "coat" else UNICORN_MANES
+	return COATS if type == "coat" else GLOWS
+
+
+static func swatch(type: String, value: String, kind := "") -> Color:
 	## the trait's colour, for the trait picker's buttons
+	if _kind(kind) == "unicorn":
+		var u: Array = values(type, "unicorn").get(value, [-1.0, 0.0, 1.0])
+		var own := UNICORN_BASE_COAT if type == "coat" else UNICORN_BASE_MANE
+		if u[0] < 0.0:
+			return own
+		return Color.from_hsv(u[0] / 360.0, clampf(own.s + u[1] + (0.12 if type == "coat" else 0.15), 0, 1), clampf(own.v * u[2], 0, 1))
 	if type == "coat":
 		var c: Array = COATS[value]
 		return Color.from_hsv(fposmod(BASE_COAT.h + c[0] / 360.0, 1.0), clampf(BASE_COAT.s * c[1], 0, 1), clampf(BASE_COAT.v * c[2], 0, 1))
@@ -41,11 +86,11 @@ static func swatch(type: String, value: String) -> Color:
 	return Color.from_hsv(g[0] / 360.0, clampf(BASE_GLOW.s * g[1], 0, 1), 1.0)
 
 
-static func other_than(t: Dictionary) -> Dictionary:
+static func other_than(t: Dictionary, kind := "") -> Dictionary:
 	## a second creature that differs from t in every trait
 	var out := {}
 	for type in TYPES:
-		var pool: Array = (COATS if type == "coat" else GLOWS).keys()
+		var pool: Array = values(type, kind).keys()
 		pool.erase(t.get(type, ""))
 		out[type] = pool.pick_random()
 	return out

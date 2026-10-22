@@ -11,12 +11,13 @@ extends RefCounted
 ## Vertex table (Dictionary of packed arrays, one entry a vertex):
 ##   pos, nrm, tan (PackedVector3Array: rest position, normal, fur direction; only the fur direction's part along the
 ##     surface is kept as the tangent, since Godot keeps tangents flat on the surface), col (PackedColorArray),
-##   c0, c1, c2 (PackedFloat32Array, four a vertex: CUSTOM0..2), bones (PackedInt32Array, four a vertex),
+##   c0, c1, c2, c3 (PackedFloat32Array, four a vertex: CUSTOM0..3), bones (PackedInt32Array, four a vertex),
 ##   weights (PackedFloat32Array, four a vertex), shapes ({name: {"pos", "nrm", "tan"}}: the vertices in that shape).
 
 const CUSTOM_FLAGS := (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) \
 	| (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT) \
-	| (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT)
+	| (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT) \
+	| (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM3_SHIFT)
 
 
 static func make_mesh(table: Dictionary, surfaces: Array, shape_names: Array) -> ArrayMesh:
@@ -78,7 +79,7 @@ static func _arrays(t: Dictionary, order: PackedInt32Array, pos: PackedVector3Ar
 		return a
 	var col := PackedColorArray()
 	col.resize(n)
-	var cs := [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
+	var cs := [PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array(), PackedFloat32Array()]
 	var bones := PackedInt32Array()
 	var weights := PackedFloat32Array()
 	for arr in cs:
@@ -89,14 +90,15 @@ static func _arrays(t: Dictionary, order: PackedInt32Array, pos: PackedVector3Ar
 		var i := order[k]
 		col[k] = t["col"][i]
 		for j in 4:
-			for c in 3:
-				cs[c][k * 4 + j] = t[["c0", "c1", "c2"][c]][i * 4 + j]
+			for c in 4:
+				cs[c][k * 4 + j] = t[["c0", "c1", "c2", "c3"][c]][i * 4 + j]
 			bones[k * 4 + j] = t["bones"][i * 4 + j]
 			weights[k * 4 + j] = t["weights"][i * 4 + j]
 	a[Mesh.ARRAY_COLOR] = col
 	a[Mesh.ARRAY_CUSTOM0] = cs[0]
 	a[Mesh.ARRAY_CUSTOM1] = cs[1]
 	a[Mesh.ARRAY_CUSTOM2] = cs[2]
+	a[Mesh.ARRAY_CUSTOM3] = cs[3]
 	a[Mesh.ARRAY_BONES] = bones
 	a[Mesh.ARRAY_WEIGHTS] = weights
 	return a
@@ -210,6 +212,34 @@ static func bake(name: String, length: float, fps: float, looping: bool, bones: 
 	# clip put it
 	a.compress()                        # positions, rotations, scales and blend shapes packed small
 	return a
+
+
+static func bake_fk(name: String, length: float, fps: float, looping: bool, bones: Array, frame: Callable,
+		mesh_paths := []) -> Animation:
+	## a clip written as bone turns: frame(time) -> {"rot": {bone name: Basis, a turn from its rest}, "move": {bone name:
+	## Vector3, a shift in its parent's space}, "shapes": {...}, "values": {...}}; bones not named stay at rest
+	var rest_local := []
+	for i in bones.size():
+		var p: int = bones[i]["parent"]
+		rest_local.append(bones[i]["rest"] if p < 0 else (bones[p]["rest"] as Transform3D).affine_inverse() * bones[i]["rest"])
+	var to_moves := func(tm: float) -> Dictionary:
+		var f: Dictionary = frame.call(tm)
+		var glob := []
+		glob.resize(bones.size())
+		for i in bones.size():
+			var loc: Transform3D = rest_local[i]
+			var nm: String = bones[i]["name"]
+			if f.get("rot", {}).has(nm):
+				loc.basis = loc.basis * (f["rot"][nm] as Basis)
+			if f.get("move", {}).has(nm):
+				loc.origin += f["move"][nm]
+			var p: int = bones[i]["parent"]
+			glob[i] = loc if p < 0 else (glob[p] as Transform3D) * loc
+		var moves := []
+		for i in bones.size():
+			moves.append((glob[i] as Transform3D) * (bones[i]["rest"] as Transform3D).affine_inverse())
+		return {"move": moves, "shapes": f.get("shapes", {}), "values": f.get("values", {})}
+	return bake(name, length, fps, looping, bones, mesh_paths, to_moves)
 
 
 # ------------------------------------------------------------------ the scene
