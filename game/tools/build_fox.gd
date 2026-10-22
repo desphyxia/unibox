@@ -9,9 +9,11 @@ extends SceneTree
 ##     (the sitting chest's breath, used awake, and the curled-up one, used asleep);
 ##   - every clip baked from the motion curves the Blender renders used (FoxRig, WalkRig, ReactRig in fox3d.py): idle,
 ##     walk, eat, happy, hunger, liedown, sleep, wake, and the half turns sitting and standing from either side;
-##   - places to wear things (the top of the head, the ribbon round the neck, a tail near its tip), each with the bone
-##     that carries it and where it sits in every pose, and the head's pivot in each pose and which way it faces, for
-##     looking at things.
+##   - places on the fox (the top of the head, the ribbon round the neck and a tail near its tip, where things are worn;
+##     the mouth; the head's middle), each with the bone that carries it and where it sits in every pose, and the
+##     head's pivot in each pose and which way it faces, for looking at things;
+##   - what the game needs to place it in the meadow: its shadow in each pose, its walk's stride, how far the mouth dips
+##     to eat, how big it is to touch.
 ## Then it checks the skinned fox against those curves, vertex by vertex, and prints the largest gap per clip.
 ##   godot --headless --path . -s res://tools/build_fox.gd
 
@@ -92,7 +94,12 @@ func _initialize() -> void:
 	_check()
 	var err := B.save_scene(OUT, "Fox", B.make_skeleton(bones), B.make_skin(bones), {"Skin": skin_mesh, "Fur": fur_mesh},
 		anims, {"camera": meta["camera"], "ground": meta["ground"], "turn_deg": TURN_DEG, "poses": POSES,
-			"pivots": _pivots(), "head_forward": _head_forward(), "neck_gain": neck_gain, "wear": _wear_places()})
+			"pivots": _pivots(), "head_forward": _head_forward(), "neck_gain": neck_gain, "places": _wear_places(),
+			"trait_mode": "hue", "kind": "fox",
+			# render pixels (80 to a model unit): [x offset, width] facing right, then facing left
+			"shadows": {"sit": [Vector2(-41, 282), Vector2(-31, 265)], "stand": [Vector2(-4, 201), Vector2(3, 243)],
+				"sleep": [Vector2(30, 194), Vector2(-41, 251)]},
+			"walk": {"stride": 88.0, "stance": 0.6}, "eat_drop": Vector2(-4, 44), "touch": Vector2(165, 250)})
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
 
@@ -268,6 +275,7 @@ func _table() -> Dictionary:
 	var c0 := PackedFloat32Array()
 	var c1 := PackedFloat32Array()
 	var c2 := PackedFloat32Array()
+	var c3 := PackedFloat32Array()
 	for i in n:
 		# the fur's direction: its part along the normal and its part along the surface (the tangent's direction)
 		var out: float = comb[0][i].dot(nrm[0][i])
@@ -275,6 +283,7 @@ func _table() -> Dictionary:
 		c0.append_array([lift_l[i], droop_l[i], out, blink[i]])
 		c1.append_array([glow[i], emit[i], surface[i], along])
 		c2.append_array([pos[0][i].x, pos[0][i].y, pos[0][i].z, 0.0])
+		c3.append_array([-1.0, 0.0, 0.0, 0.0])             # traits by hue (the apricot coat, the pink-violet glow)
 	var shapes := {}
 	for p in range(1, 4):
 		shapes[POSES[p]] = {"pos": pos[p], "nrm": nrm[p], "tan": comb[p]}
@@ -284,7 +293,7 @@ func _table() -> Dictionary:
 		for i in n:
 			bp.append(pos[0][i] + (br[b[1]][i] if kind[i] == 0 else Vector3.ZERO))
 		shapes[b[0]] = {"pos": bp, "nrm": nrm[0], "tan": comb[0]}
-	return {"pos": pos[0], "nrm": nrm[0], "tan": comb[0], "col": col, "c0": c0, "c1": c1, "c2": c2,
+	return {"pos": pos[0], "nrm": nrm[0], "tan": comb[0], "col": col, "c0": c0, "c1": c1, "c2": c2, "c3": c3,
 		"bones": packed[0], "weights": packed[1], "shapes": shapes}
 
 
@@ -616,7 +625,20 @@ func _wear_places() -> Dictionary:
 		tail_r += (d - along * d.dot(along)).length()
 	tail_r /= maxi(mid.size(), 1)
 	var t_up := (Vector3.UP - along * along.y).normalized()
+	# the mouth: the lower half of the snout's front
+	var front := _most(head, func(v): return v.x, 120)
+	var mid_y := _centroid(0, front).y
+	var mouth := PackedInt32Array()
+	for i in front:
+		if pos[0][i].y < mid_y:
+			mouth.append(i)
+	var mouth_at := _centroid(0, mouth)
+	var middle := []
+	for p in 4:
+		middle.append(Transform3D(Basis(), _v(rig[POSES[p]]["pivot"])))
 	return {
+		"mouth": {"bone": "head", "size": 0.1, "poses": _follow([snout, crown, cheek], Transform3D(Basis(), mouth_at))},
+		"middle": {"bone": "head", "size": 1.0, "poses": middle},
 		"head": {"bone": "head", "size": half, "poses": _follow([snout, crown, cheek], Transform3D(Basis(), top + Vector3(0, -0.05, 0)))},
 		"neck": {"bone": "body", "size": neck_r, "poses": _follow(sectors, Transform3D(Basis(fwd, up, fwd.cross(up)), rc))},
 		"tail": {"bone": "tail_0_4", "size": tail_r, "poses": _follow([near, far, upper],

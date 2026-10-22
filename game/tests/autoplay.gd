@@ -1,6 +1,6 @@
 extends Node
 ## Plays through the meadow with simulated touches and saves a screenshot at each step, to check the build.
-## Run (needs a window, not --headless):  godot --path . res://tests/autoplay.tscn -- OUT_DIR
+## Run (needs a window, not --headless):  godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn]
 
 var main: Node2D
 var out := "user://autoplay"
@@ -16,6 +16,7 @@ func _ready() -> void:
 	Game.variant = "A"
 	Game.temperament = "playful"
 	Game.creature_name = ""
+	Game.kind = args[1] if args.size() > 1 else "fox"
 	main = load("res://main.tscn").instantiate()
 	add_child(main)
 	await wait(1.5)

@@ -16,11 +16,16 @@ var amount := 0.0
 var _turn := Quaternion.IDENTITY       ## the turn last applied, eased toward the wanted one
 var _head := -1
 var _helpers := []                     ## [bone, pose index, +1 with the head or -1 against it]
+var _chain := []                       ## [bone, share]: neck bones that take a share of the turn (the unicorn's neck)
 
 
 func _ready() -> void:
 	var sk := get_skeleton()
 	_head = sk.find_bone("head")
+	for c in model.get_meta("look_chain", []):
+		var b := sk.find_bone(c[0])
+		if b >= 0:
+			_chain.append([b, float(c[1])])
 	var poses: Array = model.get_meta("poses")
 	for p in range(1, poses.size()):
 		for way in [["more", 1.0], ["less", -1.0]]:
@@ -54,6 +59,16 @@ func _process_modification_with_delta(delta: float) -> void:
 	var axis := turn.get_axis().normalized()
 	var by := turn.get_angle()
 	if by < 1e-5:
+		return
+	# a neck chain takes its shares first, each bone turning about its own joint (the bones after it follow)
+	var left := 1.0
+	for c in _chain:
+		var cg := sk.get_bone_global_pose(c[0])
+		sk.set_bone_global_pose(c[0], _about(cg.origin, Basis(axis, by * c[1])) * cg)
+		left -= c[1]
+	if not _chain.is_empty():
+		g = sk.get_bone_global_pose(_head)
+		sk.set_bone_global_pose(_head, _about(g.origin, Basis(axis, by * left)) * g)
 		return
 	sk.set_bone_global_pose(_head, _about(pivot, Basis(axis, by)) * g)
 	var gain: float = model.get_meta("neck_gain", 1.0)

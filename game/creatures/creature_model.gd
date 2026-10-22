@@ -64,9 +64,10 @@ func _ready() -> void:
 	_fur = $Skeleton3D/Fur
 	_skin_mat = _material(preload("res://creatures/shaders/skin.gdshader"))
 	_skin.set_surface_override_material(0, _skin_mat)
-	var halo := _material(preload("res://creatures/shaders/halo.gdshader"))
-	halo.render_priority = 1
-	_skin.set_surface_override_material(1, halo)
+	if _skin.mesh.get_surface_count() > 1:          ## the glow round glowing parts, for creatures that have it
+		var halo := _material(preload("res://creatures/shaders/halo.gdshader"))
+		halo.render_priority = 1
+		_skin.set_surface_override_material(1, halo)
 	_fur_source = _fur.mesh
 	for mi in [_skin, _fur]:
 		for s in mi.mesh.get_surface_count():
@@ -75,6 +76,8 @@ func _ready() -> void:
 		_noise = _noise_texture()
 	var fm := _material(preload("res://creatures/shaders/fur.gdshader"))
 	fm.set_shader_parameter("noise", _noise)
+	for k in (get_meta("fur", {}) as Dictionary):            # this creature's own fur look (strand size, shading)
+		fm.set_shader_parameter(k, get_meta("fur")[k])
 	_fur.material_override = fm
 	_fur.mesh = _layered(_fur_source, shells)
 	_player.animation_finished.connect(_on_finished)
@@ -157,7 +160,7 @@ static func _layered(src: ArrayMesh, layers: int) -> ArrayMesh:
 	for i in src.get_blend_shape_count():
 		m.add_blend_shape(src.get_blend_shape_name(i))
 	var flags := 0
-	for k in 3:
+	for k in 4:
 		flags |= Mesh.ARRAY_CUSTOM_RGBA_FLOAT << (Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT + k * Mesh.ARRAY_FORMAT_CUSTOM_BITS)
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out, shapes, {}, flags)
 	_stacks[key] = m
@@ -213,8 +216,16 @@ static func _noise_texture() -> ImageTexture3D:
 
 func set_traits(t: Dictionary) -> void:
 	_traits = t.duplicate()                ## kept for _ready when set before the creature is in the scene
-	var c: Array = Traits.COATS.get(t.get("coat", "apricot"))
-	var g: Array = Traits.GLOWS.get(t.get("glow", "pink"))
+	var kind: String = get_meta("kind", "fox")
+	if get_meta("trait_mode", "hue") == "group":
+		var coat: Array = Traits.values("coat", kind).get(t.get("coat", ""), [-1.0, 0.0, 1.0])
+		var mane: Array = Traits.values("glow", kind).get(t.get("glow", ""), [-1.0, 0.0, 1.0])
+		for m in _mats:
+			m.set_shader_parameter("coat_to", Vector4(fposmod(coat[0] / 360.0, 1.0), coat[1], coat[2], 1.0 if coat[0] >= 0.0 else 0.0))
+			m.set_shader_parameter("mane_to", Vector4(fposmod(mane[0] / 360.0, 1.0), mane[1], mane[2], 1.0 if mane[0] >= 0.0 else 0.0))
+		return
+	var c: Array = Traits.COATS.get(t.get("coat", "apricot"), Traits.COATS["apricot"])
+	var g: Array = Traits.GLOWS.get(t.get("glow", "pink"), Traits.GLOWS["pink"])
 	for m in _mats:
 		m.set_shader_parameter("coat_hue", c[0] / 360.0)
 		m.set_shader_parameter("coat_sat", c[1])
@@ -250,12 +261,12 @@ func play(name: String, seconds := -1.0) -> void:
 
 # ------------------------------------------------------------------ wearing things
 func places() -> Array:
-	return (get_meta("wear", {}) as Dictionary).keys()
+	return (get_meta("places", {}) as Dictionary).keys()
 
 
 func place_size(place: String) -> float:
 	## how big the place is (the head's half width, the neck's radius, the tail's radius), for sizing what goes there
-	return float(get_meta("wear")[place]["size"])
+	return float(get_meta("places")[place]["size"])
 
 
 func wear(place: String, thing: Node3D) -> void:
@@ -271,6 +282,13 @@ func take_off(place: String) -> void:
 		_worn.erase(place)
 
 
+func point(place: String) -> Vector3:
+	## where a place (the mouth, the head's middle, the top of the head...) is now, in this creature's own space
+	if not is_inside_tree() or not (get_meta("places", {}) as Dictionary).has(place):
+		return Vector3.ZERO
+	return place_transform(place).origin
+
+
 func worn_point(place: String) -> Vector3:
 	## where the place is now, in this creature's own space
 	return place_transform(place).origin
@@ -279,7 +297,7 @@ func worn_point(place: String) -> Vector3:
 func place_transform(place: String) -> Transform3D:
 	## the place as the clip, the pose and any look have moved it: its bone's move, applied to the place in the
 	## current pose (blended between the poses as their blend shapes are)
-	var info: Dictionary = get_meta("wear")[place]
+	var info: Dictionary = get_meta("places")[place]
 	var sk: Skeleton3D = $Skeleton3D
 	var b := sk.find_bone(info["bone"])
 	var move := sk.get_bone_global_pose(b) * sk.get_bone_global_rest(b).affine_inverse()
@@ -313,9 +331,19 @@ func progress() -> float:
 
 
 func pose_weights() -> Vector4:
-	## sit, stand, lying down, curled up asleep: from the blend shapes
+	## sit, stand, lying down, curled up asleep: from the blend shapes, or, for a creature posed by its bones alone
+	## (the unicorn stands), from the clip
 	if not _skin:
 		return Vector4(1, 0, 0, 0)
+	if _skin.get_blend_shape_count() == 0:
+		var u := progress()
+		match clip:
+			"sleep":
+				return Vector4(0, 0, 0, 1)
+			"liedown", "wake":
+				var v := u if clip == "liedown" else 1.0 - u
+				return Vector4(0, 1.0 - v, 0, v)
+		return Vector4(0, 1, 0, 0)
 	var s := _skin.get_blend_shape_value(0)
 	var d := _skin.get_blend_shape_value(1)
 	var c := _skin.get_blend_shape_value(2)

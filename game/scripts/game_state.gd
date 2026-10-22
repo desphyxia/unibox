@@ -8,7 +8,7 @@ const SAVE_PATH := "user://prototype.cfg"
 const TEMPERAMENTS := ["calm", "playful", "curious"]
 
 var variant := "A"            ## "A": visible needs (cues), "B": no visible needs
-var kind := "fox"             ## the only rendered kind so far
+var kind := "fox"             ## the kind of creature that hatches: "fox" or "unicorn" (creatures/<kind>/)
 var temperament := "playful"
 var creature_name := ""
 

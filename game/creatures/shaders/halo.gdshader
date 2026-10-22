@@ -6,7 +6,7 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
 varying vec3 col;
 
 void vertex() {
-	col = trait_colour(COLOR.rgb) * 0.22;
+	col = trait_colour(COLOR.rgb, CUSTOM3.x) * 0.22;
 }
 
 void fragment() {

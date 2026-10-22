@@ -8,6 +8,7 @@ render_mode diffuse_lambert_wrap, specular_schlick_ggx, cull_disabled, alpha_to_
 
 uniform float strand_freq = 70.0;
 uniform float tuft_freq = 9.0;
+uniform float root_shade = 0.74;      // how much darker the fur is deep down (a short coat barely is)
 uniform sampler3D noise : filter_linear, repeat_enable;   // creature_model.gd: 32 cells each way, red strands, green tufts
 const float NOISE_CELLS = 32.0;
 
@@ -23,7 +24,7 @@ void vertex() {
 	h = CUSTOM2.w;
 	tip = COLOR.a;
 	glow = CUSTOM1.x;
-	base = trait_colour(COLOR.rgb);
+	base = trait_colour(COLOR.rgb, CUSTOM3.x);
 	fur_len = length(vec2(CUSTOM0.z, CUSTOM1.w));   // the fur's length outward and along the surface
 }
 
@@ -38,7 +39,7 @@ void fragment() {
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	ALPHA_ANTIALIASING_EDGE = 0.45;
 	vec3 tipc = base + (vec3(1.0) - base) * tip * 0.5;
-	ALBEDO = h < 0.001 ? base : mix(base, tipc, h) * mix(0.74, 1.0, h);
+	ALBEDO = h < 0.001 ? base : mix(base, tipc, h) * mix(root_shade, 1.0, h);
 	ROUGHNESS = 0.6;
 	SPECULAR = 0.2;
 	RIM = 0.15;

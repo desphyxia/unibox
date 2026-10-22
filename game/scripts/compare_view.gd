@@ -51,7 +51,7 @@ func _ready() -> void:
 	root.add_child(bg)
 	# the live fox, in its own little 3D world drawn over the meadow
 	box.stretch = true
-	box.material = FoxView.premultiplied()
+	box.material = CreatureView.premultiplied()
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(box)
 	view.own_world_3d = true
@@ -67,8 +67,8 @@ func _ready() -> void:
 
 
 func _build_3d() -> void:
-	fox = FoxView.FOX.instantiate()
-	FoxView._build_world(view, cam, fox.get_meta("camera"))
+	fox = CreatureView.scene().instantiate()
+	CreatureView._build_world(view, cam, fox.get_meta("camera"))
 	view.add_child(spin)
 	spin.add_child(fox)
 
@@ -126,8 +126,8 @@ func _build_ui() -> void:
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root.add_child(l)
 	_fps.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	var mb := FileAccess.get_file_as_bytes(FoxView.FOX.resource_path).size() / 1.0e6
-	_cap.text = "The live 3D fox, as in the meadow\nevery clip computed live, model about %.1f MB" % mb
+	var mb := FileAccess.get_file_as_bytes(CreatureView.scene().resource_path).size() / 1.0e6
+	_cap.text = "The live 3D %s, as in the meadow\nevery clip computed live, model about %.1f MB" % [Game.kind, mb]
 
 
 func _layers_text() -> String:
@@ -213,7 +213,7 @@ func _process(delta: float) -> void:
 	if _testing:
 		_fps.text = _status
 		return
-	_fps.text = "%.0f frames a second · live fox draws %dk triangles (%dk of them fur layers)" % [_fps_avg,
+	_fps.text = "%.0f frames a second · draws %dk triangles (%dk of them fur layers)" % [_fps_avg,
 		(fox.triangles + fox.fur_triangles()) / 1000, fox.fur_triangles() / 1000]
 
 
@@ -303,7 +303,7 @@ func _setup(t: Array) -> void:
 
 func _add_crowd_fox() -> void:
 	var h := Node3D.new()
-	var f: CreatureModel = FoxView.FOX.instantiate()
+	var f: CreatureModel = CreatureView.scene().instantiate()
 	f.shells = fox.shells
 	h.add_child(f)
 	view.add_child(h)
