@@ -1,9 +1,8 @@
 shader_type spatial;
-// Shell fur: the furry skin and, over it, thin copies of it (layer height CUSTOM2.w, 0 at the skin to 1 at the tips;
-// creature_model.gd stacks the copies in one mesh) lifted along each point's fur: its normal by the lift length, its
-// combed direction by the fur length, and drooping. Holes cut by a small stored noise texture make the layers read as
-// strands and tufts; on renderers that can, the strand edges are smoothed (alpha to coverage). The skeleton and blend
-// shapes have already posed the skin.
+// Shell fur: the furry skin and, over it, thin copies of it (layer height CUSTOM2.w, 0 at the skin to 1 at the tips),
+// which creature_model.gd stacks in one mesh already lifted along the fur, so the skeleton and blend shapes carry the
+// layers too. Holes cut by a small stored noise texture make the layers read as strands and tufts; on renderers that
+// can, the strand edges are smoothed (alpha to coverage).
 render_mode diffuse_lambert_wrap, specular_schlick_ggx, cull_disabled, alpha_to_coverage_and_one;
 #include "res://creatures/shaders/creature.gdshaderinc"
 
@@ -24,11 +23,8 @@ void vertex() {
 	h = CUSTOM2.w;
 	tip = COLOR.a;
 	glow = CUSTOM1.x;
-	fur_len = CUSTOM0.z;
 	base = trait_colour(COLOR.rgb);
-	vec3 comb = length(TANGENT) > 1e-5 ? normalize(TANGENT) : vec3(0.0);
-	VERTEX += NORMAL * CUSTOM0.x * (1.0 - (1.0 - h) * (1.0 - h)) + comb * fur_len * pow(h, 1.15)
-		- vec3(0.0, 1.0, 0.0) * CUSTOM0.y * h * h;
+	fur_len = length(vec2(CUSTOM0.z, CUSTOM1.w));   // the fur's length outward and along the surface
 }
 
 void fragment() {

@@ -265,8 +265,11 @@ func _table() -> Dictionary:
 	var c1 := PackedFloat32Array()
 	var c2 := PackedFloat32Array()
 	for i in n:
-		c0.append_array([lift_l[i], droop_l[i], comb[0][i].length(), blink[i]])
-		c1.append_array([glow[i], emit[i], surface[i], 1.0 if _furry(i) else 0.0])
+		# the fur's direction: its part along the normal and its part along the surface (the tangent's direction)
+		var out: float = comb[0][i].dot(nrm[0][i])
+		var along: float = (comb[0][i] - nrm[0][i] * out).length()
+		c0.append_array([lift_l[i], droop_l[i], out, blink[i]])
+		c1.append_array([glow[i], emit[i], surface[i], along])
 		c2.append_array([pos[0][i].x, pos[0][i].y, pos[0][i].z, 0.0])
 	var shapes := {}
 	for p in range(1, 4):
