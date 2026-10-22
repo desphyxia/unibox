@@ -15,6 +15,11 @@ meadow (see "Live 3D foxes" below).
 - **Dress up:** the basket in the bottom-right corner holds a flower crown, a scarf and a bow. Drag one onto a fox and
   it wears it (crown on its head, scarf round its neck, bow on a tail); it stays on through walking, turning, eating and
   sleeping. Drag it off to take it back; a tap on it pats the fox as usual.
+- **The pond:** a signpost by the sandy path (a drop of water on it) sends the fox along the path to the pond, and the
+  view slides there with it; the signpost at the pond (the apple tree on it) leads back. Tap the water: ripples spread,
+  creatures nearby look, and the fox walks to the shore, drinks and splashes. A basket at the pond holds a flowering
+  plant, a lantern (it glows at night) and a ball: drag them onto the grass, anywhere; tap the plant and it sways, tap
+  the ball and it rolls, and a fox runs after it. Creatures never walk into the water.
 - **It looks at you:** while a finger is on the meadow (or carries an apple), a fox that isn't busy turns its head to
   look at it.
 - **A second fox and an egg:** about four minutes after the hatch, an adult fox in other colours trots in and sits by
@@ -32,7 +37,8 @@ meadow (see "Live 3D foxes" below).
 
 Variant A (visible needs): about a minute after hatching, the fox looks at the tree and sighs, and the apples
 bounce and glow. It repeats every 22 seconds until the fox is fed, then comes back after 150 seconds. Nothing bad
-happens if it's ignored. Variant B shows no cues.
+happens if it's ignored. At the pond it gets thirsty a little while after it
+arrives: it looks at the water and sighs, and the water glints, until it has a drink. Variant B shows no cues.
 
 Island time runs from dawn to dusk in about ten minutes, then has a short night. At night the fox dozes off and
 sleeps until dawn; a tap wakes it. The sun or moon in the top-left corner switches between day and night.
@@ -109,7 +115,9 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   squash hides it.
 - Trait colours (values in `scripts/traits.gd`): the coat's apricot band and the bright foxfire band get new colours,
   everything else stays. Eight coats and five glows. The baby is the adult model at about two thirds size.
-- The meadow art is drawn from code (`art/generators/meadow.py`).
+- The meadow and pond art is drawn from code (`art/generators/meadow.py`; the two places' backdrop is one drawing
+  saved as two halves, `meadow.svg` and `meadow_east.svg`, imported with the same high-quality compression so the
+  join doesn't show).
 - The sounds are synthesised (`art/generators/sfx.py`).
 - There's no music yet.
 

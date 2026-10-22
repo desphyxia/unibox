@@ -7,7 +7,7 @@ var _next := 0
 
 
 func _ready() -> void:
-	for n in ["chirp", "chirp2", "happy", "sigh", "knock", "crack", "hatch", "pickup", "drop", "munch", "sparkle", "chime", "pop"]:
+	for n in ["chirp", "chirp2", "happy", "sigh", "knock", "crack", "hatch", "pickup", "drop", "munch", "sparkle", "chime", "pop", "splash", "slurp", "bloop"]:
 		var s = load("res://sfx/%s.wav" % n)
 		if s:
 			_streams[n] = s

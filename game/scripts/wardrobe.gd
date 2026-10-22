@@ -31,23 +31,27 @@ func _ready() -> void:
 
 
 func _draw() -> void:
-	## the basket: a woven bowl with a handle
-	draw_set_transform(Vector2(0, -6), 0.0, Vector2(1.0, 0.42))
-	draw_circle(Vector2.ZERO, 62.0, Color(0.42, 0.27, 0.16, 0.28))
-	draw_set_transform(Vector2.ZERO)
-	draw_arc(Vector2(0, -28), 52.0, PI * 1.08, PI * 1.92, 24, Color("b98652"), 6.0, true)
+	draw_basket(self)
+
+
+static func draw_basket(c: CanvasItem) -> void:
+	## a woven basket with a handle (this one, and the things-to-place basket at the pond)
+	c.draw_set_transform(Vector2(0, -6), 0.0, Vector2(1.0, 0.42))
+	c.draw_circle(Vector2.ZERO, 62.0, Color(0.42, 0.27, 0.16, 0.28))
+	c.draw_set_transform(Vector2.ZERO)
+	c.draw_arc(Vector2(0, -28), 52.0, PI * 1.08, PI * 1.92, 24, Color("b98652"), 6.0, true)
 	var body := PackedVector2Array([Vector2(-60, -22), Vector2(60, -22), Vector2(46, 12), Vector2(-46, 12)])
-	draw_colored_polygon(body, Color("d9a86a"))
+	c.draw_colored_polygon(body, Color("d9a86a"))
 	for k in 4:
 		var y := -16.0 + k * 8.0
 		var half := 58.0 - k * 4.0
-		draw_line(Vector2(-half, y), Vector2(half, y), Color("b98652"), 2.0, true)
+		c.draw_line(Vector2(-half, y), Vector2(half, y), Color("b98652"), 2.0, true)
 	for k in 9:
 		var x := -48.0 + k * 12.0
-		draw_line(Vector2(x * 1.08, -22), Vector2(x * 0.85, 12), Color("c4925a"), 1.5, true)
-	draw_set_transform(Vector2(0, -22), 0.0, Vector2(1.0, 0.25))
-	draw_arc(Vector2.ZERO, 60.0, 0.0, TAU, 32, Color("b98652"), 6.0, true)
-	draw_set_transform(Vector2.ZERO)
+		c.draw_line(Vector2(x * 1.08, -22), Vector2(x * 0.85, 12), Color("c4925a"), 1.5, true)
+	c.draw_set_transform(Vector2(0, -22), 0.0, Vector2(1.0, 0.25))
+	c.draw_arc(Vector2.ZERO, 60.0, 0.0, TAU, 32, Color("b98652"), 6.0, true)
+	c.draw_set_transform(Vector2.ZERO)
 
 
 func release(it: WearItem, p: Vector2) -> void:

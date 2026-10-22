@@ -1,5 +1,6 @@
 """Stand-in sound effects for the playable prototype, synthesised from code (no recordings): creature chirps, egg knocks
-and cracks, a hatch chime, pick-up and drop pops, munching, a sigh, sparkles. Soft and short, for small ears.
+and cracks, a hatch chime, pick-up and drop pops, munching, a sigh, sparkles, water (splash, slurp, bloop). Soft and
+short, for small ears.
 Usage: python sfx.py OUT_DIR"""
 import os, sys, wave
 import numpy as np
@@ -96,3 +97,14 @@ save("munch", munch, 0.38)
 save("sparkle", mix(*[(0.06 * i, bell(f, 0.6, 7.0)) for i, f in enumerate((1568, 2093, 2637))]), 0.3)
 save("chime", mix((0, bell(784, 1.2, 3.5)), (0.12, bell(1175, 1.2, 3.5))), 0.38)
 save("pop", glide(700, 1100, 0.06, (1.0, 0.1)) * env(int(SR * 0.06), 0.002, 0.05, 2), 0.3)
+
+# water: a splash (a soft noisy burst with a few bubbles), a slurp for drinking, and a little bloop for a ripple
+def bubble(f, d):
+    s = glide(f, f * 1.8, d, (1.0, 0.15))
+    return s * env(len(s), 0.004, d * 0.85, 2.0)
+
+
+spl = lowpass(noise(0.45), 0.18) * env(int(SR * 0.45), 0.005, 0.4, 2.2)
+save("splash", mix((0, spl), *[(0.05 + 0.06 * i + rng.uniform(0, 0.03), bubble(rng.uniform(500, 900), 0.06) * 0.5) for i in range(5)]), 0.4)
+save("slurp", mix(*[(0.09 * i, bubble(f, 0.07)) for i, f in enumerate((380, 460, 420))], (0, lowpass(noise(0.3), 0.08) * env(int(SR * 0.3), 0.02, 0.25) * 0.4)), 0.34)
+save("bloop", bubble(520, 0.12), 0.3)

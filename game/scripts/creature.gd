@@ -17,7 +17,9 @@ signal arrived                         ## a walk ended (dragged, called or wande
 ## Its points (head, mouth, the top of its head) come from the model's places, wherever the clip has put them; its
 ## shadow, walk stride, eating dip and size to touch come with the model too (render pixels, 80 to a model unit).
 const WALK_SPEED := 120.0
-const GROUND := Rect2(120, 525, 784, 205)  ## where it may walk (world), inside the always-visible area
+const GROUND := Rect2(120, 525, 1808, 205) ## where it may walk (world): the meadow, the path and the pond
+const MEADOW_AREA := Rect2(120, 525, 784, 205)   ## each place's always-visible ground: it wanders within one
+const POND_AREA := Rect2(1144, 525, 784, 205)
 const LOOPS := ["idle", "walk", "sleep"]
 const CLIP_FRAMES := {"eat": 16, "happy": 16, "hunger": 20, "liedown": 20, "turn_sit": 13, "turn_stand": 13}  ## as rendered
 const TAG_ABOVE := 90.0                    ## the name tag's gap above the top of the head (past the ears), render pixels
@@ -56,6 +58,13 @@ var busy := false                      ## reacting or eating: stands still
 var turning := false
 var asleep := false
 var food_target: Node2D = null         ## an apple on the ground it is walking to
+var _drink_at = null                   ## Vector2: the shore spot it is walking to, to drink
+var _play_with: Node2D = null          ## a ball it is running after
+var _glance = null                     ## Vector2: something to look at for a moment (ripples)
+var _glance_until := 0.0
+var thirsty := false
+var _thirst_at := -1.0                 ## when it next gets thirsty at the pond (set when it first gets there)
+var _next_thirst_cue := 0.0
 var _clip := {}                        ## the one-shot clip playing: t, dur, fps, frames, fired, events, face
 var _idle_for := 0.0
 var _next_wander := 6.0
@@ -168,14 +177,108 @@ func worn_at(place: String) -> Vector2:
 
 
 func _look_around() -> void:
-	## look at a finger on the meadow (or what it carries) while awake and not busy with a clip
+	## look at a finger on the meadow (or what it carries) while awake and not busy with a clip, or glance at ripples
 	if not look.model.look:
 		return
 	var f = meadow.finger if meadow else null
+	if f == null and _glance != null and _age < _glance_until:
+		f = _glance
 	var on := f != null and not asleep and _clip.is_empty() and (f as Vector2).distance_to(head_world()) < 700.0
 	if on:
 		look.look_toward(look.to_local(meadow.world.to_global(f)))
 	look.model.look.looking = on
+
+
+# ------------------------------------------------------------------ places and the pond
+static func area_at(x: float) -> String:
+	return "pond" if x >= 1024.0 else "meadow"
+
+
+static func area_rect(x: float) -> Rect2:
+	return POND_AREA if area_at(x) == "pond" else MEADOW_AREA
+
+
+func glance(p: Vector2, seconds := 1.6) -> void:
+	## look at something for a moment (ripples on the water)
+	_glance = p
+	_glance_until = _age + seconds
+
+
+func drink_at(p: Vector2) -> void:
+	## walk to the shore nearest p and drink
+	if asleep:
+		await wake()
+	food_target = null
+	_play_with = null
+	_drink_at = Pond.drink_spot(p)
+	face_toward(_drink_at.x)
+	walk_to(_drink_at, 1.1)
+
+
+func drink() -> void:
+	## the head dips to the water, three slurps with ripples, then a happy splash
+	_drink_at = null
+	busy = true
+	target = null
+	Log.event("drink", who)
+	await _settle()
+	var pond: Pond = meadow.pond
+	var lap := func(i: int):
+		_sfx("slurp", 1.0 + 0.06 * i, 0.04)
+		pond.ripple(mouth_world() + Vector2(0, 22), 0.55)
+	await play_clip("eat", 12.0, false, {4: lap.bind(0), 7: lap.bind(1), 10: lap.bind(2)})
+	thirsty = false
+	_thirst_at = _age + 150.0
+	await splash()
+	busy = false
+
+
+func splash() -> void:
+	## a happy hop with drops of water flying up
+	_sfx("splash", 1.0, 0.06)
+	meadow.pond.ripple(mouth_world() + Vector2(0, 26), 1.3)
+	Fx.sparkles(meadow.fx, mouth_world() + Vector2(0, -10), 9, 70, Color(0.7, 0.88, 1.0))
+	var t := create_tween()
+	t.tween_property(self, "lift", 26.0, 0.17).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	t.tween_property(self, "lift", 0.0, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await play_clip("happy", 14.0)
+
+
+func thirst_cue() -> void:
+	## variant A at the pond: it turns to the water, looks and sighs, and the water glints
+	busy = true
+	await _settle()
+	meadow.pond.shimmer(3.5)
+	Log.event("need_cue", "thirst")
+	var tx: float = Pond.CENTRE.x
+	if absf(tx - position.x) > 60 and signf(tx - position.x) != facing:
+		await turn_to(signf(tx - position.x))
+	await play_clip("hunger", 12.0, false, {9: func(): _sfx("sigh")})
+	busy = false
+
+
+func chase(ball: Node2D, at: Vector2) -> void:
+	## run after a rolling ball, then play with it
+	if asleep or busy:
+		return
+	_play_with = ball
+	_drink_at = null
+	food_target = null
+	face_toward(at.x)
+	walk_to(at + Vector2(-60.0 * signf(at.x - position.x + 0.01), 6), 1.5)
+
+
+func _play_ball() -> void:
+	## at the ball: a pat and a happy bounce
+	var ball := _play_with
+	_play_with = null
+	Log.event("play_ball", who)
+	if is_instance_valid(ball) and ball.has_method("roll") and randf() < 0.5:
+		ball.roll()                        # sometimes it nudges it on
+	Fx.hearts(meadow.fx, head_world() + Vector2(0, -30), 2)
+	busy = true
+	await play_clip("happy", 14.0)
+	busy = false
 
 
 # ------------------------------------------------------------------ touch
@@ -192,6 +295,8 @@ func touch_move(p: Vector2) -> void:
 	if not _dragging and p.distance_to(_press_at) > 16:
 		_dragging = true
 		food_target = null
+		_drink_at = null
+		_play_with = null
 		Log.event("creature_walk", "drag")
 	if _dragging:
 		walk_to(p + _drag_offset, 1.7)
@@ -310,7 +415,7 @@ func wake() -> void:
 
 # ------------------------------------------------------------------ actions
 func walk_to(p: Vector2, speed := 1.0) -> void:
-	target = Vector2(clampf(p.x, GROUND.position.x, GROUND.end.x), clampf(p.y, GROUND.position.y, GROUND.end.y))
+	target = Pond.shore(Vector2(clampf(p.x, GROUND.position.x, GROUND.end.x), clampf(p.y, GROUND.position.y, GROUND.end.y)))
 	speed_factor = speed
 	_idle_for = 0.0
 
@@ -318,6 +423,8 @@ func walk_to(p: Vector2, speed := 1.0) -> void:
 func call_to(p: Vector2) -> void:
 	## the child tapped the meadow: it looks up, chirps and trots over
 	food_target = null
+	_drink_at = null
+	_play_with = null
 	_sfx("chirp", 1.1)
 	Log.event("creature_walk", "call")
 	if asleep:
@@ -598,10 +705,14 @@ func _process(delta: float) -> void:
 			_idle_for = 0.0
 			_next_wander = _wander_gap()
 			var p := position + Vector2(randf_range(-220, 220), randf_range(-60, 60))
+			var rect := area_rect(position.x)
 			if follow and is_instance_valid(follow):
 				p = follow.position + Vector2(randf_range(-170, 170), randf_range(-30, 50))
+				rect = area_rect(follow.position.x)
 			elif home != null:
 				p = home + Vector2(randf_range(-90, 90), randf_range(-25, 25))
+				rect = area_rect(home.x)
+			p = Vector2(clampf(p.x, rect.position.x, rect.end.x), clampf(p.y, rect.position.y, rect.end.y))
 			walk_to(p, 0.55 if temperament == "calm" else 0.75)
 	# needs: only variant A shows a cue
 	if Game.variant == "A" and shows_needs and not hungry and _age > _hunger_at:
@@ -610,9 +721,26 @@ func _process(delta: float) -> void:
 	if hungry and Game.variant == "A" and shows_needs and calm and _age >= _next_cue:
 		_next_cue = _age + 22.0
 		hunger_cue()
+		return
+	# thirst: only at the pond; it first gets thirsty a little while after it arrives there
+	if meadow and meadow.pond and area_at(position.x) == "pond":
+		if _thirst_at < 0.0:
+			_thirst_at = _age + 12.0
+		if not thirsty and _age > _thirst_at:
+			thirsty = true
+			_next_thirst_cue = _age
+	if thirsty and Game.variant == "A" and shows_needs and calm and _age >= _next_thirst_cue and area_at(position.x) == "pond":
+		_next_thirst_cue = _age + 22.0
+		thirst_cue()
 
 
 func _arrive() -> void:
+	if _drink_at != null and position.distance_to(_drink_at) < 14.0:
+		drink()
+		return
+	if _play_with and is_instance_valid(_play_with):
+		_play_ball()
+		return
 	if food_target and is_instance_valid(food_target):
 		var apple := food_target
 		food_target = null

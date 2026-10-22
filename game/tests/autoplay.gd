@@ -120,6 +120,50 @@ func _ready() -> void:
 	await wait(0.5)
 	print("WORN after ", c.worn)
 	await shot("bow-off")
+	# the pond: the signpost sends it along the path, and the view follows
+	await tap(w(Vector2(944, 520)))
+	await until(func(): return main.area == "pond" and c.target == null and Creature.area_at(c.position.x) == "pond", 15.0)
+	await wait(1.4)
+	print("POND area=", main.area, " fox at ", c.position)
+	await shot("pond")
+	# a tap on the water: ripples, and it goes to drink, then splashes
+	await tap(w(Vector2(1560, 596)))
+	await wait(0.3)
+	await shot("water-ripples")
+	await until(func(): return c.busy, 8.0)
+	await wait(0.55)
+	await shot("drinking")
+	await until(func(): return not c.busy, 8.0)
+	print("DRANK thirsty=", c.thirsty)
+	# variant A at the pond: thirst
+	c.thirsty = true
+	c._next_thirst_cue = 0.0
+	await wait(1.3)
+	await shot("thirst-cue")
+	await until(func(): return not c.busy, 8.0)
+	c.thirsty = false
+	# things to place: the plant, the lantern and the ball from the basket onto the grass
+	for d in [["plant", Vector2(1290, 640)], ["lantern", Vector2(1880, 600)], ["ball", c.position + Vector2(-260, 30)]]:
+		var from := w(DecorBasket.AT + DecorBasket.ITEMS[d[0]]["spot"] + Vector2(0, -12))
+		var to := w(d[1] + Vector2(0, -30))
+		await press(from)
+		for k in 10:
+			await drag(from.lerp(to, (k + 1) / 10.0))
+		await release(to)
+		await wait(0.4)
+	await wait(1.0)
+	await shot("decor")
+	# a tap on the ball rolls it, and the fox runs after it
+	var ball: Node2D = main.decor.items["ball"]
+	await tap(w(ball.position + Vector2(0, -30)))
+	await wait(0.9)
+	await shot("ball-chase")
+	await wait(2.5)
+	# back to the meadow
+	await tap(w(Vector2(1104, 550)))
+	await until(func(): return main.area == "meadow" and c.target == null and Creature.area_at(c.position.x) == "meadow", 15.0)
+	await wait(1.4)
+	await shot("back-to-meadow")
 	main.ui.open_panel()
 	await wait(0.3)
 	await shot("parent-area")

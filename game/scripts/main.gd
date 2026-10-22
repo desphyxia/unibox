@@ -3,7 +3,9 @@ extends Node2D
 ## it, call it, feed it apples from the tree; a parent can name it through the gate. Island time runs from dawn
 ## to dusk in about ten minutes. A few minutes in, a second fox comes to the nest; bring yours over and an egg appears,
 ## the child picks the baby's colours from its parents and hatches it (breeding.gd, trait_picker.gd). Follows
-## docs/first-ten-minutes.md, without the pond and dressing so far. The foxes are live 3D models (fox_view.gd).
+## docs/first-ten-minutes.md. The creatures are live 3D models (creature_view.gd).
+## Two places side by side: the meadow (world x 0..1024) and, along the sandy path, the pond (x 1024..2048). The view
+## slides to whichever place the child's creature is in; signposts by the path send it there (travel()).
 
 const BASE := Vector2(1024, 768)            ## the area every screen shows; wider or taller screens see more meadow
 const NEST_AT := Vector2(512, 600)
@@ -36,6 +38,14 @@ var _ground_press = null
 var _finger := -1                           ## the touch being followed; Safari numbers touches arbitrarily, not from 0
 var finger = null                           ## Vector2: where that finger is on the meadow while it is down (creatures look)
 var wardrobe: Wardrobe                      ## the basket of things to wear
+var pond: Pond
+var decor: DecorBasket                      ## the basket of things to place, at the pond
+var area := "meadow"                        ## the place in view
+var pan := 0.0                              ## how far east the view has slid (0 the meadow, 1024 the pond)
+var _pan_tween: Tween
+var _travel_to := ""                        ## a signpost sent the creature here: the view waits for it
+var _away_for := 0.0                        ## how long the followed creature has been in the other place
+const PLACES := {"meadow": 0.0, "pond": 1024.0}
 
 
 func _ready() -> void:
@@ -90,13 +100,14 @@ func _build_world() -> void:
 		c.z_index = -11
 		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		world.add_child(c)
-	var back := Sprite2D.new()
-	back.texture = load("res://art/meadow/meadow.svg")
-	back.centered = false
-	back.scale = Vector2.ONE * 0.5                # drawn at 2x for sharp Retina screens
-	back.position = Vector2(-512, -128)
-	back.z_index = -10
-	world.add_child(back)
+	for b in [["meadow", Vector2(-512, -128)], ["meadow_east", Vector2(1536, -128)]]:
+		var back := Sprite2D.new()
+		back.texture = load("res://art/meadow/%s.svg" % b[0])
+		back.centered = false
+		back.scale = Vector2.ONE * 0.5            # drawn at 2x for sharp Retina screens
+		back.position = b[1]
+		back.z_index = -10
+		world.add_child(back)
 	time = IslandTime.new()
 	world.add_child(time)
 	var tint := CanvasModulate.new()
@@ -134,6 +145,16 @@ func _build_world() -> void:
 	wardrobe = Wardrobe.new()
 	wardrobe.meadow = self
 	world.add_child(wardrobe)
+	# the pond, its signposts and its basket of things to place
+	pond = Pond.new()
+	world.add_child(pond)
+	pond.tapped.connect(_on_water_tapped)
+	for sp in [Signpost.new("pond", Vector2(944, 560)), Signpost.new("meadow", Vector2(1104, 592))]:
+		world.add_child(sp)
+		sp.pressed.connect(travel)
+	decor = DecorBasket.new()
+	decor.meadow = self
+	world.add_child(decor)
 	fx.z_index = 60
 	world.add_child(fx)
 	overlay.z_index = 80
@@ -142,7 +163,78 @@ func _build_world() -> void:
 
 func _layout() -> void:
 	var view := get_viewport_rect().size
-	world.position = ((view - BASE) / 2.0).floor()
+	world.position = ((view - BASE) / 2.0).floor() - Vector2(roundf(pan), 0)
+	if time:
+		time.view_x = pan
+
+
+# ------------------------------------------------------------------ the two places
+func show_place(to: String, quick := false) -> void:
+	## slide the view to a place
+	if to == area and not quick:
+		return
+	area = to
+	Log.event("area", to)
+	if _pan_tween:
+		_pan_tween.kill()
+	if quick:
+		pan = PLACES[to]
+		_layout()
+		return
+	_pan_tween = create_tween()
+	_pan_tween.tween_method(func(v: float):
+		pan = v
+		_layout(), pan, PLACES[to], 1.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+func travel(to: String) -> void:
+	## a signpost: the child's creature (the one touched last) walks along the path there, and the view goes with it
+	var c := _selected if is_instance_valid(_selected) else creature
+	show_place(to)
+	if c == null:
+		return
+	_travel_to = to
+	var entry := Vector2(1190, 650) if to == "pond" else Vector2(860, 640)
+	c.call_to(entry)
+
+
+func _follow_view(delta: float) -> void:
+	## the view follows the child's creature from one place to the other (after a moment, so a walk near the path end
+	## doesn't swing it about)
+	var c := _selected if is_instance_valid(_selected) else creature
+	if c == null or not is_instance_valid(c):
+		return
+	var where := Creature.area_at(c.position.x)
+	if _travel_to != "":
+		if where == _travel_to:
+			_travel_to = ""
+		return
+	_away_for = _away_for + delta if where != area else 0.0
+	if _away_for > 0.6:
+		_away_for = 0.0
+		show_place(where)
+
+
+func _process(delta: float) -> void:
+	_follow_view(delta)
+
+
+func _on_water_tapped(p: Vector2) -> void:
+	## ripples: creatures at the pond look; the child's creature (the one touched last) goes and drinks
+	var c := _selected if is_instance_valid(_selected) else creature
+	for o in creatures:
+		if is_instance_valid(o) and Creature.area_at(o.position.x) == "pond" and o.position.distance_to(p) < 520.0:
+			o.glance(p)
+	if c and not c.busy and Creature.area_at(c.position.x) == "pond":
+		c.drink_at(p)
+
+
+func ball_moved(ball: Node2D, to = null) -> void:
+	## the ball was put down or rolled: the nearest creature that isn't busy runs after it
+	var at: Vector2 = to if to != null else ball.position
+	var chaser := _nearest(at, func(o: Creature): return not o.busy and not o.asleep and o.position.distance_to(at) < 460.0)
+	if chaser:
+		chaser.chase(ball, at)
 
 
 func _start_session() -> void:
@@ -364,7 +456,10 @@ func _unhandled_input(e: InputEvent) -> void:
 
 
 func _ground_tap(p: Vector2) -> void:
-	## a tap on the meadow calls the creature over; before hatching it just makes a little sparkle
+	## a tap on the meadow calls the creature over; before hatching it just makes a little sparkle; on the water, ripples
+	if Pond.contains(p, 6.0):
+		pond.tap(p)
+		return
 	Fx.sparkles(fx, p, 5, 30, Color(1, 0.97, 0.85))
 	var c := _selected if is_instance_valid(_selected) else creature
 	if c and not c.busy and p.y > Creature.GROUND.position.y - 60:
