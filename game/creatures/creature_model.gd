@@ -76,6 +76,8 @@ func _ready() -> void:
 		_noise = _noise_texture()
 	var fm := _material(preload("res://creatures/shaders/fur.gdshader"))
 	fm.set_shader_parameter("noise", _noise)
+	for k in (get_meta("fur", {}) as Dictionary):            # this creature's own fur look (strand size, shading)
+		fm.set_shader_parameter(k, get_meta("fur")[k])
 	_fur.material_override = fm
 	_fur.mesh = _layered(_fur_source, shells)
 	_player.animation_finished.connect(_on_finished)

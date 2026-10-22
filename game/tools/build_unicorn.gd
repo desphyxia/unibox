@@ -88,7 +88,8 @@ func _initialize() -> void:
 		"look_chain": [["neck_1", 0.2], ["neck_2", 0.3]], "trait_mode": "group", "kind": "unicorn",
 		"shadows": {"sit": [Vector2(16, 240), Vector2(-16, 240)], "stand": [Vector2(16, 240), Vector2(-16, 240)],
 			"sleep": [Vector2(10, 270), Vector2(-10, 270)]},
-		"walk": {"stride": 77.0, "stance": STANCE}, "eat_drop": Vector2(6, 26), "touch": Vector2(190, 250)})
+		"walk": {"stride": 77.0, "stance": STANCE}, "eat_drop": Vector2(6, 26), "touch": Vector2(190, 250),
+		"fur": {"root_shade": 0.93, "strand_freq": 130.0, "tuft_freq": 16.0}})
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
 
@@ -153,15 +154,15 @@ func _lying(f: Dictionary, k: float, curl: float) -> void:
 		_add(f, "leg_%sh_upper" % side, _r(ACROSS, 0.95 * k))         # the thigh forward under the belly
 		_add(f, "leg_%sh_lower" % side, _r(ACROSS, -2.1 * k))         # the hock folded back
 		_add(f, "leg_%sh_hoof" % side, _r(ACROSS, -0.35 * k))
-	# the neck lowers, then curls round toward the viewer so the face rests by the front legs
-	_add(f, "neck_0", _r(ACROSS, -0.3 * k) * _r(Vector3.UP, -0.35 * curl))
-	_add(f, "neck_1", _r(ACROSS, -0.45 * k) * _r(Vector3.UP, -0.45 * curl))
-	_add(f, "neck_2", _r(ACROSS, -0.3 * k - 0.15 * curl))
-	_add(f, "head", _r(ACROSS, -0.2 * curl))
-	_add(f, "ear_0", _r(Vector3.RIGHT, -0.25 * curl))
-	_add(f, "ear_1", _r(Vector3.RIGHT, 0.25 * curl))
-	for t in 4:
-		_add(f, "tail_%d" % t, _r(Vector3.UP, -0.35 * curl) * _r(ACROSS, 0.1 * k))
+	# the neck stays up while it lies down, then lowers forward until the chin rests on the ground in front
+	_add(f, "neck_0", _r(ACROSS, 0.1 * k - 0.55 * curl))
+	_add(f, "neck_1", _r(ACROSS, -0.1 * k - 0.45 * curl))
+	_add(f, "neck_2", _r(ACROSS, -0.15 * curl))
+	_add(f, "head", _r(ACROSS, 0.6 * curl) * _r(Vector3.RIGHT, 0.12 * curl))
+	_add(f, "ear_0", _r(Vector3.RIGHT, 0.3 * curl))
+	_add(f, "ear_1", _r(Vector3.RIGHT, -0.3 * curl))
+	for t in 4:                          # the tail lifts to lie along the ground, and sweeps round
+		_add(f, "tail_%d" % t, _r(Vector3.UP, -0.3 * curl) * _r(ACROSS, (-0.55 if t == 0 else -0.18) * k))
 
 
 func _frame(tm: float, name: String) -> Dictionary:

@@ -31,8 +31,8 @@ argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 out = argv[0] if argv else "unicorn_live.bin"
 S = U.S
 
-BUDGET = {"body": 3200, "head": 1400, "hair_sheet": 520, "lock": 110, "ribbon": 160, "horn": 300, "ear": 160,
-          "ear_in": 80, "hoof": 140, "eye_base": 160, "eye_iris": 160, "eye_pupil": 90, "eye_glint": 30, "eye_glint2": 24,
+BUDGET = {"body": 3200, "head": 2000, "hair_sheet": 1500, "lock": 260, "ribbon": 320, "horn": 300, "ear": 300,
+          "ear_in": 160, "hoof": 140, "eye_base": 160, "eye_iris": 160, "eye_pupil": 90, "eye_glint": 30, "eye_glint2": 24,
           "lid": 120, "lowlid": 70, "lash": 40, "mouth": 120, "nostril": 70, "star": 60}
 OTHER = 160
 SKIP = ("sparkle", "ground", "shadow", "wing", "petal", "leaf", "fcentre", "stamen")
@@ -296,7 +296,7 @@ for ob in list(bpy.data.objects):
                 Wb[wrong, names.index(bn)] = 0.0
         Wb /= np.maximum(Wb.sum(1, keepdims=True), 1e-12)
         put(Wb, names)
-        fur_len[:] = 0.045
+        fur_len[:] = 0.022                                  # a short, soft coat (a pony's, not a fox's)
         body_pts.append(V)
     elif nm == "hair_sheet":
         trait = 2
@@ -320,7 +320,7 @@ for ob in list(bpy.data.objects):
     comb *= fur_len[:, None] * 0.9
     lift = fur_len * 0.45
     droop = fur_len * 0.15
-    tip = np.where(fur_len > 0, 0.35, 0.0)
+    tip = np.where(fur_len > 0, 0.12, 0.0)
     cls = "emit" if nm in EMIT else ("gloss" if nm in GLOSS or nm.startswith("hoof") else "lit")
     emit = EMIT.get(nm, 0.0)
     extra = np.column_stack([np.full(n, emit), blink, np.full(n, trait), lift, droop, comb, B, W])

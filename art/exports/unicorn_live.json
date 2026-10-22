@@ -219,25 +219,25 @@
  ],
  "groups": {
   "lit": {
-   "verts": 6011,
+   "verts": 9990,
    "stride": 26,
-   "tris": 11370,
+   "tris": 19195,
    "vert_offset": 0,
-   "index_offset": 625144
+   "index_offset": 1038960
   },
   "gloss": {
    "verts": 989,
    "stride": 26,
    "tris": 1680,
-   "vert_offset": 761584,
-   "index_offset": 864440
+   "vert_offset": 1269300,
+   "index_offset": 1372156
   },
   "emit": {
    "verts": 102,
    "stride": 26,
    "tris": 108,
-   "vert_offset": 884600,
-   "index_offset": 895208
+   "vert_offset": 1392316,
+   "index_offset": 1402924
   }
  },
  "attr": [
@@ -265,25 +265,25 @@
  },
  "ground": [
   0.0,
-  0.2637,
+  0.2571,
   0.0
  ],
  "places": {
   "head": {
    "bone": "head",
    "at": [
-    2.4079354405403137,
-    5.121349048614502,
-    0.0843870961922221
+    2.4310793340206147,
+    5.143569028377533,
+    0.11566850588424131
    ],
-   "size": 0.8143652999657206
+   "size": 0.842897683836054
   },
   "mouth": {
    "bone": "head",
    "at": [
-    3.485498479434422,
-    3.7154542292867387,
-    0.21713855423565423
+    3.498742866516113,
+    3.73055659532547,
+    0.21420562639832497
    ],
    "size": 0.1
   },
@@ -323,15 +323,15 @@
  ],
  "triangles": {
   "body": 3200,
-  "ear": 319,
-  "ear_in": 320,
+  "ear": 512,
+  "ear_in": 638,
   "eye_base": 320,
   "eye_glint": 60,
   "eye_glint2": 48,
   "eye_iris": 320,
   "eye_pupil": 180,
-  "hair_sheet": 2080,
-  "head": 1400,
+  "hair_sheet": 6000,
+  "head": 2000,
   "hoof_ff": 140,
   "hoof_fh": 140,
   "hoof_nf": 140,
@@ -339,7 +339,7 @@
   "horn": 300,
   "lash": 478,
   "lid": 478,
-  "lock": 2087,
+  "lock": 4881,
   "lowlid": 140,
   "mouth": 119,
   "nostril": 140,
