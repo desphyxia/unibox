@@ -81,6 +81,44 @@ func _ready() -> void:
 	Game.set_creature_name("Pip")
 	await wait(0.4)
 	await shot("named")
+	# dress up: the crown, the scarf and the bow from the basket onto the fox
+	await wait(1.5)
+	for id in ["crown", "scarf", "bow"]:
+		var from := w(Wardrobe.AT + Wardrobe.ITEMS[id]["spot"])
+		var to := w(c.head_world() + Vector2(0, 40))
+		await press(from)
+		for k in 10:
+			await drag(from.lerp(to, (k + 1) / 10.0))
+		await release(to)
+		await wait(0.5)
+	print("WORN ", c.worn)
+	await shot("dressed")
+	# a finger held up and behind it: it looks round at it, and follows it
+	var fp := w(c.head_world() + Vector2(-300.0 * c.facing, -160))
+	await press(fp)
+	await wait(0.9)
+	await shot("look-finger")
+	for k in 12:
+		await drag(fp + Vector2(50.0 * c.facing * k, 60.0))
+	await wait(0.4)
+	await shot("look-follow")
+	await release(fp + Vector2(50.0 * c.facing * 11, 60.0))
+	await wait(0.6)
+	# walking and turning round dressed
+	await tap(w(Vector2(250 if c.position.x > 500 else 780, 640)))
+	await wait(0.5)
+	await shot("dressed-walk")
+	await wait(3.0)
+	# take the bow off again: drag it back to the basket
+	var bow_at := w(c.worn_at("tail"))
+	await press(bow_at)
+	var basket := w(Wardrobe.AT)
+	for k in 10:
+		await drag(bow_at.lerp(basket, (k + 1) / 10.0))
+	await release(basket)
+	await wait(0.5)
+	print("WORN after ", c.worn)
+	await shot("bow-off")
 	main.ui.open_panel()
 	await wait(0.3)
 	await shot("parent-area")

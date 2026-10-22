@@ -5,13 +5,16 @@ extends Node3D
 ## the glow round them) and a "Fur" mesh (the furry skin), both skinned, with the poses as blend shapes, and an
 ## AnimationPlayer holding every clip. This script adds the shell fur (the Fur mesh stacked with thin copies of itself,
 ## all in one mesh, so the engine poses it once a frame), the trait colours, the idle blinks and which way it faces,
-## and plays the clips.
+## and plays the clips, each blending into the next. It can also look at something (head_look.gd turns the head and
+## neck after the clip) and wear things at the places the build tool found (the top of the head, the neck, a tail): a
+## worn thing follows its place through every clip and pose.
 ##   idle, walk, eat, happy, hunger, liedown, sleep, wake (loops: idle, walk, sleep), turn and turn_stand (half way
 ##   round, sitting or standing; the creature then faces the other way)
 
 signal clip_done(name: String)
 
 const LOOPING := ["idle", "walk", "sleep"]
+const BLEND := 0.2                     ## seconds one clip blends into the next
 
 var shells := 6:                       ## fur layers over the skin
 	set(v):
@@ -34,6 +37,7 @@ var eyes_closed := 0.0:                ## set by the clips; the idle blinks are 
 			for m in _mats:
 				m.set_shader_parameter("eyes_closed", v)
 var triangles := 0                     ## drawn a frame without the fur layers
+var look: HeadLook                     ## set look.target (this creature's own space) and look.looking
 
 var _player: AnimationPlayer
 var _skin: MeshInstance3D
@@ -48,6 +52,7 @@ var _pending_seconds := -1.0
 var _next_blink := 2.4
 var _blink_until := -1.0
 var _t := 0.0
+var _worn := {}                        ## place -> the Node3D worn there
 
 static var _noise: ImageTexture3D
 static var _stacks := {}               ## the stacked fur meshes, by source and layer count, shared by every creature
@@ -73,6 +78,10 @@ func _ready() -> void:
 	_fur.material_override = fm
 	_fur.mesh = _layered(_fur_source, shells)
 	_player.animation_finished.connect(_on_finished)
+	look = HeadLook.new()
+	look.model = self
+	$Skeleton3D.add_child(look)
+	($Skeleton3D as Skeleton3D).skeleton_updated.connect(_place_worn)
 	if not _traits.is_empty():
 		set_traits(_traits)
 	play(_pending if _pending != "" else clip, _pending_seconds)
@@ -228,10 +237,72 @@ func play(name: String, seconds := -1.0) -> void:
 	var a := _player.get_animation(anim)
 	_clip_scale = a.length / seconds if seconds > 0.0 else 1.0
 	_player.speed_scale = _clip_scale * speed
-	_player.play(anim)
-	_player.seek(0.0, true)
+	# blend from the last clip, but not out of a turn: it ends exactly on the other side's rest pose, as the facing flips
+	var from := String(_player.current_animation if _player.current_animation != "" else _player.assigned_animation)
+	var blend := 0.0 if from == "" or from.begins_with("turn") else BLEND
+	if from == anim:
+		_player.seek(0.0, true)
+	else:
+		_player.play(anim, blend)
 	if name == "idle":
 		eyes_closed = 0.0
+
+
+# ------------------------------------------------------------------ wearing things
+func places() -> Array:
+	return (get_meta("wear", {}) as Dictionary).keys()
+
+
+func place_size(place: String) -> float:
+	## how big the place is (the head's half width, the neck's radius, the tail's radius), for sizing what goes there
+	return float(get_meta("wear")[place]["size"])
+
+
+func wear(place: String, thing: Node3D) -> void:
+	take_off(place)
+	_worn[place] = thing
+	$Skeleton3D.add_child(thing)
+	_place_worn()
+
+
+func take_off(place: String) -> void:
+	if _worn.has(place):
+		(_worn[place] as Node3D).queue_free()
+		_worn.erase(place)
+
+
+func worn_point(place: String) -> Vector3:
+	## where the place is now, in this creature's own space
+	return place_transform(place).origin
+
+
+func place_transform(place: String) -> Transform3D:
+	## the place as the clip, the pose and any look have moved it: its bone's move, applied to the place in the
+	## current pose (blended between the poses as their blend shapes are)
+	var info: Dictionary = get_meta("wear")[place]
+	var sk: Skeleton3D = $Skeleton3D
+	var b := sk.find_bone(info["bone"])
+	var move := sk.get_bone_global_pose(b) * sk.get_bone_global_rest(b).affine_inverse()
+	var w := pose_weights()
+	var poses: Array = info["poses"]
+	var at := Vector3.ZERO
+	var q := Quaternion(0, 0, 0, 0)
+	var first := (poses[0] as Transform3D).basis.get_rotation_quaternion()
+	for i in 4:
+		if w[i] <= 0.0:
+			continue
+		var t: Transform3D = poses[i]
+		at += t.origin * w[i]
+		var qi := t.basis.get_rotation_quaternion()
+		if qi.dot(first) < 0.0:
+			qi = -qi
+		q += qi * w[i]
+	return move * Transform3D(Basis(q.normalized()), at)
+
+
+func _place_worn() -> void:
+	for place in _worn:
+		(_worn[place] as Node3D).transform = place_transform(place)
 
 
 func progress() -> float:

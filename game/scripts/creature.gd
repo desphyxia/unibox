@@ -4,7 +4,8 @@ extends Touchable
 ## and one-shot clips for eating, being petted (happy), the hunger cue, lying down to sleep, sleeping, waking and
 ## turning round (half way, sitting or standing, from one side's view to the other's). The clips keep the timings the
 ## rendered frames had, and their events (bites, the sigh) still count in those frames.
-## Touch: tap to pet, drag to walk it somewhere. main.gd also calls it to a tapped spot and hands it food.
+## Touch: tap to pet, drag to walk it somewhere. main.gd also calls it to a tapped spot and hands it food. It looks at a
+## finger on the meadow (or the apple it carries) while it isn't busy, and wears things from the basket (wardrobe.gd).
 
 signal petted
 signal ate
@@ -36,7 +37,8 @@ var voice := 1.0                       ## pitch of its sounds: babies squeak hig
 var shows_needs := true                ## variant A's hunger cue: only the child's first creature shows it
 var follow: Creature = null            ## a baby potters about near this parent
 var home = null                        ## Vector2: stays near here when it wanders (the second adult by the nest)
-var meadow: Node2D                     ## main.gd: effects layer, the tree, island time, food on the ground
+var meadow: Node2D                     ## main.gd: effects layer, the tree, island time, food on the ground, the finger
+var worn := {}                         ## place -> the id of what it wears there
 
 var body := Node2D.new()               ## lift and tilt, pivot at the feet
 var squash := Node2D.new()             ## squash and stretch, times the depth scale
@@ -139,6 +141,41 @@ func hit_test(p: Vector2) -> bool:
 		c = position + Vector2((40 + _ref.x) * facing, -110 + _ref.y) * s
 	var d := (p - c) / (Vector2(165, 250 if not asleep else 140) * s)
 	return d.length() <= 1.0
+
+
+# ------------------------------------------------------------------ wearing things
+func wear(id: String) -> String:
+	## put it on; returns what was worn at that place before ("" if nothing), which goes back to the basket
+	var place: String = Wardrobe.ITEMS[id]["place"]
+	var old: String = worn.get(place, "")
+	worn[place] = id
+	look.fox.wear(place, Wardrobe.model(id, look.fox.place_size(place)))
+	Log.event("item_worn", id)
+	_sfx("chirp2", 1.1)
+	Fx.sparkles(meadow.fx, worn_at(place), 6, 40)
+	return old
+
+
+func take_off(place: String) -> void:
+	worn.erase(place)
+	look.fox.take_off(place)
+
+
+func worn_at(place: String) -> Vector2:
+	## where the place is on screen now, in meadow coordinates
+	var g := look.to_global(look.to_picture(look.fox.worn_point(place)))
+	return meadow.world.to_local(g) if meadow else g
+
+
+func _look_around() -> void:
+	## look at a finger on the meadow (or what it carries) while awake and not busy with a clip
+	if not look.fox.look:
+		return
+	var f = meadow.finger if meadow else null
+	var on := f != null and not asleep and _clip.is_empty() and (f as Vector2).distance_to(head_world()) < 700.0
+	if on:
+		look.look_toward(look.to_local(meadow.world.to_global(f)))
+	look.fox.look.looking = on
 
 
 # ------------------------------------------------------------------ touch
@@ -479,6 +516,7 @@ func _process(delta: float) -> void:
 	body.rotation = tilt
 	squash.scale = squash_v * s
 	look.fox.facing = facing                  # a turn changes facing only as it ends
+	_look_around()
 	# the shadow follows the pose: sitting (or lying like a sphinx), standing, curled up
 	var w := look.fox.pose_weights()
 	var side := 0 if facing > 0 else 1
