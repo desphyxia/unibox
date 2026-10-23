@@ -147,7 +147,7 @@ def head_carved(L):
 def ear_frame(side):
     c, _ = CRAN
     base = ray_hit(head_base, c, np.array([-0.15, 0.6 * side, 0.8]))
-    up = np.array([-0.05, 0.4 * side, 1.0])
+    up = np.array([-0.05, 0.55 * side, 1.0])
     up /= np.linalg.norm(up)
     fwd = np.array([1.0, 0.15 * side, 0.0])
     fwd -= up * (fwd @ up)
@@ -156,7 +156,7 @@ def ear_frame(side):
 
 
 EARS = {s: ear_frame(s) for s in (1, -1)}
-EAR_H, EAR_W, FOLD = 0.9, 0.36, 0.56
+EAR_H, EAR_W, FOLD = 0.78, 0.36, 0.6
 
 
 def frame_ellipsoid(P, c, axes, radii):
@@ -170,21 +170,29 @@ def ear_parts(side):
     f = EAR_H * FOLD
     lower_c = base + up * (f * 0.5)
     hinge = base + up * f
-    ang = np.radians(58.0)
+    ang = np.radians(118.0)
     tip_dir = up * np.cos(ang) + fwd * np.sin(ang)        # the tip leans forward and down
     tip_n = fwd * np.cos(ang) - up * np.sin(ang)
-    tip_c = hinge + tip_dir * (EAR_H - f) * 0.48 + tip_n * 0.02
+    tip_c = hinge + tip_dir * (EAR_H - f) * 0.42 + tip_n * 0.01
     return base, up, fwd, acr, lower_c, hinge, tip_c, tip_dir, tip_n
+
+
+def flat_cone(P, a, b, ra, rb, nrm, thick):
+    """a round cone squashed along nrm: a soft triangle"""
+    def sq(X):
+        X = np.atleast_2d(X)
+        return X + ((X @ nrm) * (1 / thick - 1))[:, None] * nrm[None]
+    return round_cone(sq(P), sq(a)[0], sq(b)[0], ra, rb) * thick
 
 
 def ear_sdf(L, side):
     base, up, fwd, acr, lower_c, hinge, tip_c, tip_dir, tip_n = ear_parts(side)
     f = EAR_H * FOLD
-    lower = frame_ellipsoid(L, lower_c, (acr, up, fwd), (EAR_W, f * 0.62, 0.075))
-    tip = frame_ellipsoid(L, tip_c, (acr, tip_dir, tip_n), (EAR_W * 0.6, (EAR_H - f) * 0.7, 0.055))
-    d = smin(lower, tip, 0.1)
-    cup = frame_ellipsoid(L, lower_c + fwd * 0.07 + up * 0.03, (acr, up, fwd), (EAR_W * 0.7, f * 0.48, 0.05))
-    return smax(d, -cup, 0.03)
+    lower = flat_cone(L, base - up * 0.08, hinge, EAR_W * 0.9, EAR_W * 0.42, fwd, 0.3)
+    tip = flat_cone(L, hinge, hinge + tip_dir * (EAR_H - f), EAR_W * 0.42, 0.05, tip_n, 0.3)
+    d = smin(lower, tip, 0.06)
+    cup = flat_cone(L, base + fwd * 0.075 + up * 0.02, hinge + fwd * 0.05 - up * 0.04, EAR_W * 0.62, EAR_W * 0.22, fwd, 0.25)
+    return smax(d, -cup, 0.025)
 
 
 # ------------------------------------------------------------------ fur tufts: soft pointed clumps blended into the shape
@@ -246,8 +254,8 @@ def tail_sdf(P):
     d = np.full(len(P), 9.0)
     m = len(c)
     for i in range(m - 1):
-        r1 = 0.2 * (1 - i / m) + 0.1
-        r2 = 0.2 * (1 - (i + 1) / m) + 0.1
+        r1 = 0.14 + 0.08 * np.sin(np.pi * i / m)
+        r2 = 0.14 + 0.08 * np.sin(np.pi * (i + 1) / m)
         d = smin(d, round_cone(P, c[i], c[i + 1], r1, r2), 0.05)
     return d
 
@@ -263,7 +271,7 @@ def make_tufts(rng):
         e = rng.uniform(0.1, 1.2)
         d = np.array([-0.4 + 0.5 * np.cos(e), np.sin(a) * 0.8, np.cos(a) * 0.6 + 0.5])
         return c + d * 0.6, d
-    tuft_ring(hb, crown, 34 if not QUICK else 20, 0.18, 0.11, np.array([-0.9, 0.0, -0.3]), rng, jitter=0.12, kind="head")
+    tuft_ring(hb, crown, 20 if not QUICK else 14, 0.2, 0.13, np.array([-0.9, 0.0, -0.5]), rng, jitter=0.08, kind="head")
     # the cheeks: big fluffy clumps fanning out and back below the eyes
     for s in (1, -1):
         def cheek(rng, s=s):
@@ -283,28 +291,28 @@ def make_tufts(rng):
             d /= np.linalg.norm(d)
             TUFTS.append((root - nn * 0.08, root + d * ln * rng.uniform(0.9, 1.1), r * rng.uniform(0.9, 1.1), "bib"))
     # the coat over the back and sides: broad, short lobes combed down and back
-    for k in range(26 if not QUICK else 18):
+    for k in range(18 if not QUICK else 14):
         a = rng.uniform(0.9, 2 * np.pi - 0.9)
         p = np.array([-0.2 + 0.7 * np.cos(a), 0.68 * np.sin(a), rng.uniform(0.75, 1.75)])
         root = project(body_base, p[None], 4)[0]
         nn = grad(body_base, root[None])[0]
-        d = nn * 0.3 + np.array([-0.5, 0.0, -1.0])
+        d = nn * 0.18 + np.array([-0.5, 0.0, -1.0])
         d /= np.linalg.norm(d)
-        TUFTS.append((root - nn * 0.08, root + d * rng.uniform(0.22, 0.32), rng.uniform(0.15, 0.19), "coat"))
+        TUFTS.append((root - nn * 0.1, root + d * rng.uniform(0.3, 0.4), rng.uniform(0.17, 0.21), "coat"))
     # the tail: clumps all along it, longer in the middle, pointing toward its tip
     tc = tail_curve(60)
     T_ = np.gradient(tc, axis=0)
-    for _ in range(90 if not QUICK else 45):
-        i = rng.integers(2, len(tc) - 2)
+    for _ in range(26 if not QUICK else 18):
+        i = rng.integers(4, len(tc) - 3)
         a = rng.uniform(0, 2 * np.pi)
         side = np.cross(T_[i], [0, 0, 1.0]); side /= np.linalg.norm(side) + 1e-9
         up = np.cross(side, T_[i] / np.linalg.norm(T_[i]))
         out = side * np.cos(a) + up * np.sin(a)
         root = tc[i] + out * 0.12
-        d = T_[i] / np.linalg.norm(T_[i]) * 0.9 + out * 0.6
+        d = T_[i] / np.linalg.norm(T_[i]) * 1.0 + out * 0.3
         d /= np.linalg.norm(d)
-        ln = 0.35 * np.sin(np.pi * (i / len(tc)) ** 0.8) + 0.12
-        TUFTS.append((root - out * 0.04, root + d * ln, 0.1, "tail"))
+        ln = 0.3 * np.sin(np.pi * (i / len(tc)) ** 0.8) + 0.12
+        TUFTS.append((root - out * 0.06, root + d * ln, 0.13, "tail"))
     world = list(TUFTS)
     TUFTS.clear()
     return TUFTS_head, world
@@ -342,7 +350,7 @@ def base_sdf(P):
 
 
 # ------------------------------------------------------------------ colours
-BLACK, BLACK2 = hexc("#141113"), hexc("#2b2527")
+BLACK, BLACK2 = hexc("#1d191b"), hexc("#3a3234")
 WHITE, WHITE2 = hexc("#fbf8f2"), hexc("#e9e3db")
 TAN, TAN2 = hexc("#a85a2a"), hexc("#c98448")
 NOSE_C = hexc("#18151a")
@@ -388,7 +396,7 @@ def colours(V, N):
         tc = tail_curve(60)
         dt = np.linalg.norm(B[:, None, :] - tc[None, -14:, :], axis=2).min(1)
         w = np.maximum(w, body * smooth(0.3, 0.2, dt))
-        c = mix(c, TAN, body * smooth(0.7, 0.5, B[:, 2]) * smooth(0.25, 0.35, B[:, 2]) * smooth(0.1, -0.3, B[:, 0])
+        c = mix(c, TAN, body * smooth(0.6, 0.45, B[:, 2]) * smooth(0.28, 0.36, B[:, 2]) * smooth(0.1, -0.3, B[:, 0]) * 0.9
                 * (np.abs(B[:, 1]) > 0.3))
     wc = mix(np.tile(WHITE, (n, 1)), WHITE2, smooth(0.2, -0.6, N[:, 2]) * 0.5)
     c = mix(c, wc, w)
@@ -472,8 +480,8 @@ def build_face():
 
 
 # ------------------------------------------------------------------ scene
-VIEWS_AT = {"hero": (34.0, 6.0, (0.2, 0.0, 1.62), 3.9), "head": (30.0, 3.0, (0.6, 0.0, 2.5), 3.0),
-            "front": (80.0, 3.0, (0.4, 0.0, 1.62), 3.9), "side": (0.0, 3.0, (0.0, 0.0, 1.62), 3.9)}
+VIEWS_AT = {"hero": (34.0, 6.0, (0.2, 0.0, 1.8), 4.3), "head": (30.0, 3.0, (0.6, 0.0, 2.5), 3.0),
+            "front": (80.0, 3.0, (0.4, 0.0, 1.78), 4.15), "side": (0.0, 3.0, (0.0, 0.0, 1.62), 3.9)}
 
 
 def camera(view):
@@ -512,13 +520,13 @@ def main():
     rng = np.random.default_rng(5)
     global HEAD_TUFTS, BODY_TUFTS
     HEAD_TUFTS, BODY_TUFTS = make_tufts(rng)
-    lo, hi = ((-0.9, -1.3, 1.05), (2.0, 1.3, 3.8)) if HEAD_ONLY else ((-1.9, -1.4, 0.0), (2.0, 1.5, 3.8))
+    lo, hi = ((-0.9, -1.3, 1.05), (2.0, 1.3, 4.5)) if HEAD_ONLY else ((-1.9, -1.4, 0.0), (2.0, 1.5, 4.5))
     F, o = sample(sdf, lo, hi, H)
     V, T = surface_nets(F, o, H)
     V = project(sdf, V, 2)
     N = grad(sdf, V)
     col = colours(V, N)
-    Ub.add_mesh("coat", V, T, col, Ub.material("coat", rough=0.7, sss=0.12, sheen=1.0, spec=0.22), N)
+    Ub.add_mesh("coat", V, T, col, Ub.material("coat", rough=0.88, sss=0.1, sheen=1.0, spec=0.1), N)
     build_face()
     lights()
     res = 520 if QUICK else 1200

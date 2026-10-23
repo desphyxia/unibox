@@ -1,6 +1,6 @@
-"""A meadow backdrop for the collie renders (collie.py), made from code in the storybook watercolour feel of the
-reference: a soft sky, distant hills, a pale path, warm green grass with a few daisies and clover, and a soft shadow
-under the dog. Each render (transparent PNG) is set on it.
+"""A meadow backdrop for the collie renders (collie_a.py, collie_b.py, collie_c.py), made from code in the storybook
+watercolour feel of the reference: a soft sky, distant hills, a pale path, warm green grass with a few daisies and
+clover, and a soft shadow under the dog. Each render (transparent PNG) is set on it.
 Usage: python collie_backdrop.py RENDER_DIR OUT_DIR"""
 import os, sys
 import numpy as np
