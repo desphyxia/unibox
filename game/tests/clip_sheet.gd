@@ -14,7 +14,7 @@ func _ready() -> void:
 	var cv = main.compare
 	await get_tree().create_timer(1.0).timeout
 	await _shot(out + "/idle.png")
-	for c in [["walk", 0.4], ["eat", 0.55], ["happy", 0.35], ["hunger", 0.4], ["liedown", 0.9], ["sleep", 1.0], ["wake", 0.7]]:
+	for c in [["walk", 0.4], ["eat", 0.55], ["happy", 0.35], ["hunger", 0.4], ["liedown", 0.9], ["sleep", 1.0], ["wake", 0.7], ["yawn", 0.75]]:
 		if c[0] != "sleep":
 			cv.play_clip(c[0])
 		await get_tree().create_timer(c[1]).timeout

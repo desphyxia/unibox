@@ -34,6 +34,15 @@ var _fps_avg := 60.0
 const LOOKS := [["apricot", "pink"], ["sky", "violet"], ["snow", "blue"], ["mint", "gold"], ["cocoa", "green"], ["lilac", "pink"]]
 
 
+static func _look(i: int) -> Array:
+	## the i-th look for the kind on show: the fox's list, or for another kind its own default first, then its colours
+	if Game.kind == "fox":
+		return LOOKS[i % LOOKS.size()]
+	var coats: Array = Traits.values("coat").keys()
+	var glows: Array = Traits.values("glow").keys()
+	return [coats[i % coats.size()], glows[(i * 3) % glows.size()]]
+
+
 func _ready() -> void:
 	layer = 20
 	process_priority = 1000                ## last of all, so it can time everyone's game code
@@ -115,7 +124,7 @@ func _build_ui() -> void:
 	_bar.add_child(_layers_btn)
 	_bar.add_child(_button("Speed test", speed_test))
 	_bar.add_child(_button("Colours", func():
-		_traits_i = (_traits_i + 1) % LOOKS.size()
+		_traits_i += 1
 		_apply_look()))
 	for l in [_fps, _cap]:
 		l.add_theme_color_override("font_color", INK)
@@ -148,7 +157,8 @@ func _live_foxes() -> Array[CreatureModel]:
 
 
 func _apply_look() -> void:
-	var t := {"coat": LOOKS[_traits_i][0], "glow": LOOKS[_traits_i][1]}
+	var lk := _look(_traits_i)
+	var t := {"coat": lk[0], "glow": lk[1]}
 	fox.set_traits(t)
 
 
@@ -313,7 +323,7 @@ func _add_crowd_fox() -> void:
 	h.add_child(f)
 	view.add_child(h)
 	crowd.append(h)
-	var look: Array = LOOKS[(_traits_i + crowd.size()) % LOOKS.size()]
+	var look: Array = _look(_traits_i + crowd.size())
 	f.set_traits({"coat": look[0], "glow": look[1]})
 	f.facing = -1.0 if crowd.size() % 2 == 1 else 1.0
 	f.play("walk")

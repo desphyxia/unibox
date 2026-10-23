@@ -8,7 +8,8 @@ extends Node2D
 const RENDER_PPU := 80.0                         ## render pixels per model unit (640-wide frames, 8 units across)
 const BOX := Rect2(-5.25, -7.8, 10.5, 9.6)       ## the picture round the ground point, model units (x right, y down)
 
-const SCENES := {"fox": "res://creatures/fox/fox.scn", "unicorn": "res://creatures/unicorn/unicorn.scn"}
+const SCENES := {"fox": "res://creatures/fox/fox.scn", "unicorn": "res://creatures/unicorn/unicorn.scn",
+	"collie": "res://creatures/collie/collie.scn"}
 
 var model: CreatureModel
 var view := SubViewport.new()
