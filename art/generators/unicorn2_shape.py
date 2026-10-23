@@ -7,7 +7,10 @@ The head is modelled straight ("head-local" coordinates) and then turned toward 
 
 surface_nets() turns a sampled field into a mesh (a vertex in every cell the surface crosses, a quad across every
 crossing edge), and project() pulls vertices exactly onto the surface."""
+import os
 import numpy as np
+
+STAND = bool(os.environ.get("UNI2_STAND"))                   # the game's rest pose: head straight, all four hooves down
 
 # ------------------------------------------------------------------ primitives
 def _len(v):
@@ -75,9 +78,9 @@ def rot(axis, deg):
 
 # ------------------------------------------------------------------ the head's turn
 HEAD_PIVOT = np.array([1.22, 0.0, 3.85])                     # top of the neck
-HEAD_YAW = 22.0                                              # toward the viewer (+y)
+HEAD_YAW = 0.0 if STAND else 22.0                            # toward the viewer (+y)
 HEAD_PITCH = 7.0                                             # nose down a little
-HEAD_ROLL = -7.0                                             # a sweet tilt
+HEAD_ROLL = 0.0 if STAND else -7.0                           # a sweet tilt
 HEAD_M = rot((0, 0, 1), HEAD_YAW) @ rot((0, 1, 0), HEAD_PITCH) @ rot((1, 0, 0), HEAD_ROLL)
 
 
@@ -236,6 +239,10 @@ LEGS = {
     "nh": [((-0.72, 0.36, 2.3), 0.46), ((-0.54, 0.4, 1.68), 0.28), ((-1.04, 0.42, 1.05), 0.17), ((-1.02, 0.42, 0.47), 0.135),
            ((-1.02, 0.42, 0.3), 0.15)],
 }
+
+
+if STAND:                                                    # the raised near foreleg stands like the far one
+    LEGS["nf"] = [((x, -y, z), r) for (x, y, z), r in LEGS["ff"]]
 
 
 def leg_sdf(P, name):

@@ -79,15 +79,16 @@ of it (4 for babies) stacked in one mesh and lifted along the fur when the game 
 noise texture (`creatures/shaders/`). Coat
 and glow colours are worked out by the shaders, so a new colour costs no download. The fox is about 1.1 MB to download.
 
-**The unicorn** (`creatures/unicorn/unicorn.scn`, about 0.6 MB) is built differently from the fox: Blender exports it
-once, standing, with its own skeleton (body, three neck bones, head, ears, three bones down each leg, four along the
-tail) and skin weights (`art/generators/unicorn_live_export.py`), and `tools/build_unicorn.gd` writes every clip as bone
-turns: idle, a four-beat walk, a nibble, a little prance, looking up and sighing, lying down (front legs, then hind
-legs, then the chin comes down to rest), sleeping, and the half turns. So it needs no pose shapes, and a new clip costs
-only a few kilobytes. Its coat and mane are its two traits, recoloured by part (each point says whether it is coat or
-mane), with eight coats and six manes in `scripts/traits.gd`. Its coat fur is short and soft (each model can set its
-own fur look). `tests/clip_sheet.tscn -- OUT_DIR unicorn` photographs every clip, and `tests/autoplay.tscn -- OUT_DIR
-unicorn` plays the whole session with it.
+**The unicorn** (`creatures/unicorn/unicorn.scn`, about 1.3 MB) is the new one built from scratch
+(`art/generators/unicorn2.py`, with the v1 hair): `art/generators/unicorn2_live_export.py` builds it standing, at game
+density (about 52 thousand triangles, 28 thousand of them hair; no fur layers, its coat is smooth), with closed eyes for
+blinking, a skeleton (body, three neck bones, head, ears, three bones down each leg, four along the tail) and skin
+weights, scaled to about the fox's size and mirrored so its decorated side (garland, freckles, crown) faces the game's
+camera. `tools/build_unicorn.gd` writes every clip as bone turns: idle, a four-beat walk, a nibble, a little prance,
+looking up and sighing, lying down, sleeping, a yawn, and the half turns. Its coat and mane are its two traits,
+recoloured by part, with eight coats and six manes in `scripts/traits.gd`. (The first, placeholder unicorn still builds
+with `UNICORN=1` from `art/exports/unicorn_live`.) `tests/clip_sheet.tscn -- OUT_DIR unicorn` photographs every clip,
+and `tests/autoplay.tscn -- OUT_DIR unicorn` plays the whole session with it.
 
 **Building a creature:** `art/generators/fox_live_export.py` (Blender) exports the fox's mesh in its four poses with
 its fur and rig data to `art/exports/`; then `godot --headless --path . -s res://tools/build_fox.gd` builds the scene in

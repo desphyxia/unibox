@@ -11,7 +11,7 @@ Everything here is new (none of unicorn3d.py, artgen5.py or their helpers):
 Run:   blender -b --factory-startup -P unicorn2.py -- OUTDIR [--quick] [--clay] [--hair v1|v2] [view ...]
        views: hero side front back head
        --hair v1  the first hair: one solid ribbon a lock (kept for comparison)
-       --game     with v2: the hair at game density (fewer segments round and along each strand)
+       --game     everything at game density (fewer segments everywhere; the hair keeps its shape)
        --hair v2  hair a game can draw too: locks that split into wisps toward the end, stray strands, combed flow,
                   and a strand shader (a shine along the hair, fine lengthwise grooves and streaks, lighter tips,
                   darker under-layers, light through thin edges) using only per-vertex data and per-pixel noise
@@ -29,9 +29,9 @@ OUT = argv[0] if argv else "unicorn2_out"
 QUICK = "--quick" in argv
 CLAY = "--clay" in argv
 HAIR_STYLE = argv[argv.index("--hair") + 1] if "--hair" in argv else "v1"
-GAME_LOD = "--game" in argv                                     # v2 hair at a density the game could draw live
+GAME_LOD = "--game" in argv                                     # a density the game can draw live
+TAIL_CURVES = []                                                # the tail locks' centre lines (for the export's tail bones)
 VIEWS = [a for a in argv[1:] if not a.startswith("--") and a not in ("v1", "v2")] or ["hero"]
-os.makedirs(OUT, exist_ok=True)
 rnd = random.Random(7)
 H = 0.03 if QUICK else 0.014                                   # the body's grid spacing
 
@@ -277,7 +277,7 @@ def build_eyes():
         look /= np.linalg.norm(look)
         up = v - look * (v @ look)
         up /= np.linalg.norm(up)
-        Vs, Fs = uv_sphere(np.zeros(3), R, 64, 40)
+        Vs, Fs = uv_sphere(np.zeros(3), R, *((24, 16) if GAME_LOD else (64, 40)))
         d = Vs / R
         cosang = d @ look
         h = d @ up                                            # -1 bottom .. 1 top
@@ -317,7 +317,7 @@ def build_eyes():
         lid = head_surface(np.array(lid), 0.016)
         m = len(lid)
         rad = np.array([0.006 + 0.03 * smooth(0.0, 0.75, k / (m - 1)) * (1 - 0.7 * smooth(0.85, 1.0, k / (m - 1))) for k in range(m)])
-        Vt, Ft = tube(lid, rad, 8)
+        Vt, Ft = tube(lid, rad, 5 if GAME_LOD else 8)
         add_mesh("lid", U.head_to_world(Vt), Ft, None, dark)
         # lashes from the back third, sweeping up and back
         for (t0, ln, bend) in ((0.62, 0.17, 0.5), (0.74, 0.21, 0.65), (0.86, 0.24, 0.8), (0.97, 0.2, 0.9)):
@@ -327,15 +327,49 @@ def build_eyes():
             pts = []
             for s_ in np.linspace(0, 1, 9):
                 pts.append(root + v * ln * s_ * (1 - 0.3 * s_) - u * ln * bend * s_ * s_ * 0.8 + nrm * ln * 0.55 * s_)
-            Vt, Ft = tube(np.array(pts), np.linspace(0.016, 0.002, 9), 6)
+            Vt, Ft = tube(np.array(pts), np.linspace(0.016, 0.002, 9), 4 if GAME_LOD else 6)
             add_mesh("lash", U.head_to_world(Vt), Ft, None, dark)
         # a faint lower lid
         us2 = np.linspace(a * 0.8, -a * 0.85, 22)
         x2 = np.abs(us2) / a
         bot = -(b * 0.86 * (1.0 - np.clip(x2, 0, 1) ** 2.0) ** 0.75) - 0.16 * us2
         low = head_surface(np.array([E + u * uu + v * (bb - 0.01) for uu, bb in zip(us2, bot)]), 0.008)
-        Vt, Ft = tube(low, 0.006 + 0.008 * np.sin(np.linspace(0, np.pi, len(low))), 6)
+        Vt, Ft = tube(low, 0.006 + 0.008 * np.sin(np.linspace(0, np.pi, len(low))), 4 if GAME_LOD else 6)
         add_mesh("lowlid", U.head_to_world(Vt), Ft, None, material("lowlid", rough=0.5, color=hexc("#7f86c8")))
+
+
+def build_closed_eyes():
+    """the eyes shut: a lid of skin over each eye, a soft curved line where the lids meet, and three lashes"""
+    dark = material("dark", rough=0.45, spec=0.3, color=DARK)
+    a, b = U.EYE_HALF
+    for side in (1, -1):
+        E, n, u, v = U.EYES[side]
+        nu, nv = (9, 6) if GAME_LOD else (24, 14)
+        V, C = [], []
+        for i in range(nu):
+            uu = -a * 1.08 + 2.16 * a * i / (nu - 1)
+            x = min(abs(uu) / a, 1.0)
+            top = b * 1.12 * (1.0 - x ** 2.2) ** 0.62 - 0.16 * uu + 0.03
+            bot = -(b * 0.9 * (1.0 - x ** 2.0) ** 0.75) - 0.16 * uu - 0.03
+            for j in range(nv):
+                vv = bot + (top - bot) * j / (nv - 1)
+                V.append(E + u * uu + v * vv)
+                C.append(mix(COAT_TOP, hexc("#e4dcf6"), smooth(0.3, 1.0, j / (nv - 1)) * 0.6))
+        V = head_surface(np.array(V), 0.03)
+        add_mesh("lidclosed", U.head_to_world(V), grid_faces(nu, nv), np.array(C), material("ear", rough=0.5, sss=0.25, sheen=0.3, spec=0.3))
+        us = np.linspace(a * 0.95, -a * 1.05, 20)
+        x = np.clip(np.abs(us) / a, 0, 1)
+        line = [E + u * uu + v * (-b * 0.22 * (1 - xx * xx) - 0.16 * uu) for uu, xx in zip(us, x)]
+        line = head_surface(np.array(line), 0.045)
+        m = len(line)
+        Vt, Ft = tube(line, 0.008 + 0.016 * np.sin(np.linspace(0, np.pi, m)) ** 0.6, 5 if GAME_LOD else 8)
+        add_mesh("lineclosed", U.head_to_world(Vt), Ft, None, dark)
+        for t0, ln in ((0.7, 0.13), (0.83, 0.16), (0.96, 0.14)):
+            root = line[int(t0 * (m - 1))]
+            nrm = U.grad(U._head_raw, root[None])[0]
+            pts = [root - v * ln * s_ * 0.9 - u * ln * s_ * 0.5 + nrm * ln * 0.3 * s_ for s_ in np.linspace(0, 1, 7)]
+            Vt, Ft = tube(np.array(pts), np.linspace(0.013, 0.002, 7), 4 if GAME_LOD else 6)
+            add_mesh("lashclosed", U.head_to_world(Vt), Ft, None, dark)
 
 
 # ------------------------------------------------------------------ ears
@@ -356,7 +390,7 @@ def build_ears():
         across = np.cross(axis, face)
         EAR_BASES.append((base, axis))
         Hh, W = 1.18, 0.32
-        nu, nr = 30, 28
+        nu, nr = (12, 10) if GAME_LOD else (30, 28)
         V, C = [], []
         for i in range(nu):
             uu = i / (nu - 1)
@@ -396,7 +430,7 @@ def build_horn():
     a = np.array([0.0, 1.0, 0.0])
     b = np.cross(axis, a)
     L, R0, turns = 2.45, 0.24, 7.5
-    nu, nr = 160, 36
+    nu, nr = (72, 12) if GAME_LOD else (160, 36)
     V, C = [], []
     for i in range(nu):
         t = i / (nu - 1)
@@ -430,7 +464,7 @@ def build_hooves():
         d /= np.linalg.norm(d)
         top = ht - d * 0.04
         ln = max(0.3, ht[2] + 0.02) if ht[2] < 0.36 else 0.3
-        nu, nr = 14, 32
+        nu, nr = (6, 12) if GAME_LOD else (14, 32)
         a = np.cross(d, [0.0, 1.0, 0.0]); a /= np.linalg.norm(a)
         b = np.cross(d, a)
         V, C = [], []
@@ -626,7 +660,9 @@ def build_hair():
             cc = shape_lock(cc, wave=shape.get("wave", 0.07) * rng.uniform(0.6, 1.3), freq=rng.uniform(0.8, 1.5),
                             phase=rng.uniform(0, 6.28), curl=shape.get("curl", [0])[i % len(shape.get("curl", [0]))],
                             curl_r=shape.get("curl_r", 0.13), curl_from=shape.get("curl_from", 0.8))
-            V, F, C = lock_mesh(cc, widths[i], thick, cols=hair_colours(kind, seed[0]), seed=seed[0])
+            if GAME_LOD:
+                cc = resample(cc, 24)
+            V, F, C = lock_mesh(cc, widths[i], thick, ring=8 if GAME_LOD else 24, cols=hair_colours(kind, seed[0]), seed=seed[0])
             add_mesh(kind, V, F, C, mat)
 
     # the near side of the mane: locks from the crest, falling over the neck and down past the shoulder
@@ -673,6 +709,7 @@ def build_hair():
     troots = base + np.stack([rng.uniform(-0.06, 0.04, n), rng.uniform(-0.14, 0.14, n), rng.uniform(-0.06, 0.08, n)], 1)
     tdirs = np.stack([np.full(n, -1.0), rng.uniform(-0.2, 0.35, n), rng.uniform(0.2, 0.55, n)], 1)
     curves = drape(troots, tdirs, rng.uniform(2.6, 3.2, n), gravity=2.7, drift=np.array([-0.35, 0.15, 0.0]), clear=0.07, stiff=0.18)
+    TAIL_CURVES[:] = list(curves)
     emit(curves, rng.uniform(0.3, 0.38, n), "tail", thick=0.3, wave=0.1, curl=[0.55, 0.0, 0.4, 0.6, 0.0, 0.0], curl_r=0.36, curl_from=0.72)
 
 
@@ -697,8 +734,10 @@ def frame(n):
     return a, np.cross(n, a), n
 
 
-def petal(L, W, cup=0.25, lift=0.2, nu=12, nv=9, col_base=None, col_edge=None, col_tip=None, notch=0.0, pointed=False):
+def petal(L, W, cup=0.25, lift=0.2, nu=None, nv=None, col_base=None, col_edge=None, col_tip=None, notch=0.0, pointed=False):
     """one petal in its own frame: x out along the petal, y across, z up; cupped across, the tip lifting"""
+    nu = nu or (5 if GAME_LOD else 12)
+    nv = nv or (4 if GAME_LOD else 9)
     V, C = [], []
     for i in range(nu):
         u = i / (nu - 1)
@@ -767,11 +806,11 @@ def flower(bq, c, n, R, petals=6, colours=None, layers=2, rot=0.0):
             W = place_local(V, c + n * (0.015 * layer), a, b, n, yaw, np.radians(6 + 18 * layer))
             bq.add("petal", W, F, C)
     # the centre: a little dome with stamens
-    Vd, Fd = uv_sphere(np.zeros(3), R * 0.22, 16, 10)
+    Vd, Fd = uv_sphere(np.zeros(3), R * 0.22, *((8, 5) if GAME_LOD else (16, 10)))
     Vd[:, 2] *= 0.55
     Wd = c + n * (R * 0.06) + np.outer(Vd[:, 0], a) + np.outer(Vd[:, 1], b) + np.outer(Vd[:, 2], n)
     bq.add("centre", Wd, Fd, np.tile(CENTRE, (len(Wd), 1)))
-    for i in range(14):
+    for i in range(4 if GAME_LOD else 14):
         ang = rnd.uniform(0, 2 * np.pi)
         rr = R * rnd.uniform(0.08, 0.2)
         p = c + n * (R * 0.16) + (a * np.cos(ang) + b * np.sin(ang)) * rr
@@ -797,7 +836,7 @@ def leaf(bq, c, n, direction, L, W, twist=0.0):
 def rose(bq, c, n, R, colours=None):
     base, edge, core = colours or (PET_PINK, PET_PINK_EDGE, PET_PINK_CORE)
     a, b, n = frame(n)
-    k = 11
+    k = 6 if GAME_LOD else 11
     for i in range(k):
         q = i / (k - 1)
         yaw = i * np.radians(137.5)
@@ -1131,6 +1170,7 @@ def camera(view):
 
 
 def main():
+    os.makedirs(OUT, exist_ok=True)
     sc = setup()
     body = build_body()
     build_eyes()
@@ -1154,4 +1194,5 @@ def main():
         print("rendered", v)
 
 
-main()
+if __name__ == "__main__":                                      # unicorn2_live_export.py imports this file instead
+    main()
