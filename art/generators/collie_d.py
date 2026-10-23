@@ -380,6 +380,8 @@ def head_colours(L, N):
 # ================================================================== the body (world)
 FRONT_STEP = {1: 0.05, -1: -0.02}                            # the near front leg a step forward
 HIND_STEP = {1: -0.06, -1: 0.01}                             # the near hind leg a step back
+if os.environ.get("COLLIE_STAND") == "1":                    # the game's collie stands square (its walk moves the legs)
+    FRONT_STEP, HIND_STEP = {1: 0.0, -1: 0.0}, {1: 0.0, -1: 0.0}
 NECK_A, NECK_B = np.array([0.3, 0.0, 0.82]), np.array([0.58, 0.0, 1.11])
 TAIL_PTS = np.array([(-0.58, 0.0, 0.84), (-0.68, 0.0, 0.72), (-0.74, 0.01, 0.53), (-0.75, 0.03, 0.36),
                      (-0.71, 0.06, 0.25), (-0.64, 0.09, 0.21)])
