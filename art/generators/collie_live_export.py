@@ -34,7 +34,10 @@ SCALE = 2.9                                                   # the game's colli
 SHIFT = np.array([0.2, 0.0, 0.0])                             # the dog's middle over the ground point
 HEAD_TRIS, COAT_TRIS = 7000, 15000                            # the meshes are simplified to these
 GUIDES = 9000                                                 # guide strands for the coat's bulk
-BLACK_FUR = D.hexc("#1d212c")                                 # a blue-black, as in the painting
+BLACK_FUR = D.hexc(os.environ.get("COLLIE_BLACK", "#2b3449"))  # the painting's "black" is a soft navy (its middle
+                                                              # tone about #283345); the game's light darkens it
+DARK_TIP = float(os.environ.get("COLLIE_TIP", "0.18"))         # the dark fur's tips lighter, blue-grey, where light catches
+FORM = float(os.environ.get("COLLIE_FORM", "0.6"))           # how much the shape's ridges lighten and grooves darken
 WHITE_FUR = D.hexc("#eeeae1")
 rng = np.random.default_rng(11)
 log = D.log
@@ -409,6 +412,42 @@ def add(name, V, T, C, N, wd, fur_len, comb, tip, trait, lift=0.4, droop=0.15):
     counts[name] = counts.get(name, 0) + len(T)
 
 
+def form_shade(V, T, amount, smooth_steps=3):
+    """a colour factor from the shape: above 1 on ridges (the tops of locks and folds), below 1 in grooves between them"""
+    n = len(V)
+    S = np.zeros((n, 3))
+    cnt = np.zeros(n)
+    for a, b in ((0, 1), (1, 2), (2, 0)):
+        np.add.at(S, T[:, a], V[T[:, b]])
+        np.add.at(S, T[:, b], V[T[:, a]])
+        np.add.at(cnt, T[:, a], 1)
+        np.add.at(cnt, T[:, b], 1)
+    fn = np.cross(V[T[:, 1]] - V[T[:, 0]], V[T[:, 2]] - V[T[:, 0]])
+    N = np.zeros_like(V)
+    for k in range(3):
+        np.add.at(N, T[:, k], fn)
+    N = unit(N)
+    lap = S / np.maximum(cnt, 1)[:, None] - V                 # toward the neighbours' middle
+    c = -np.sum(lap * N, 1)                                   # + on a ridge, - in a groove
+    for _ in range(smooth_steps):                             # soften it over the neighbours
+        Sc = np.zeros(n)
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            np.add.at(Sc, T[:, a], c[T[:, b]])
+            np.add.at(Sc, T[:, b], c[T[:, a]])
+        c = 0.5 * c + 0.5 * Sc / np.maximum(cnt, 1)
+    c = c / max(np.percentile(np.abs(c), 90), 1e-9)
+    return 1.0 + amount * np.tanh(c)
+
+
+TOP = float(os.environ.get("COLLIE_TOP", "0.55"))             # the dark coat lighter where it faces the light
+KEY = unit(np.array([0.45, 0.35, 1.0]))                         # from above, a little in front and on the near side
+
+
+def top_light(N, amount):
+    """a soft light baked into the dark fur, as the painting's blue-grey on the neck, shoulder and back"""
+    return 1.0 + amount * D.smooth(-0.2, 0.95, N @ KEY)
+
+
 def dark_or_white(C):
     """trait group from the colour: 1 the dark coat, 2 the white, 0 neither (lips, mouth)"""
     db = np.linalg.norm(C - BLACK_FUR[:3], axis=1)
@@ -432,7 +471,10 @@ Ch = np.where(furry[:, None], BLACK_FUR[None, :3] * (1 - wsm)[:, None] + WHITE_F
 lnh, _, combh, _ = D.head_groom(Lh)
 furh = np.where(D.lip_mask(Lh) | (D.nose_body(Lh) < 0.003), 0.0, np.clip(lnh * D.HS * 0.45, 0.003, 0.012))
 wj = jaw_share(Lh)
-add("head", Vh, Th, Ch, Nh, {"head": 1.0 - wj, "jaw": wj}, furh, D.hdir(combh), 0.12, dark_or_white(Ch), lift=0.3, droop=0.1)
+trh = dark_or_white(Ch)
+Ch = Ch * np.where(trh == 1.0, form_shade(Vh, Th, FORM * 0.5) * top_light(Nh, TOP * 0.6), 1.0)[:, None]
+tiph = np.where(trh == 1.0, DARK_TIP, 0.12)
+add("head", Vh, Th, Ch, Nh, {"head": 1.0 - wj, "jaw": wj}, furh, D.hdir(combh), tiph, trh, lift=0.3, droop=0.1)
 
 # the coat
 Vc, Tc = coat["V"], coat["T"]
@@ -459,7 +501,10 @@ for k in set(wroot) | set(wbare):
     wd[k] = np.where(coat["near"], a, b)
 combc = np.where(coat["near"][:, None], coat["sdir"], np.array([-1.0, 0.0, -0.4]))
 furc = np.where(coat["near"], 0.014, 0.007)
-add("coat", Vc, Tc, Cc, Nc, wd, furc, combc, 0.15, np.where(wc > 0.5, 2.0, 1.0), lift=0.35, droop=0.2)
+shade = form_shade(Vc, Tc, FORM) * top_light(Nc, TOP)
+Cc = Cc * np.where(wc > 0.5, 1.0 + (form_shade(Vc, Tc, FORM) - 1.0) * 0.35, shade)[:, None]   # the white: shape only
+add("coat", Vc, Tc, Cc, Nc, wd, furc, combc, np.where(wc > 0.5, 0.15, DARK_TIP), np.where(wc > 0.5, 2.0, 1.0),
+    lift=0.35, droop=0.2)
 
 # the face's parts and the ears
 for ob in list(bpy.data.objects):
@@ -491,7 +536,8 @@ for ob in list(bpy.data.objects):
     if name == "ear":
         i = 0 if V.mean(0)[1] > 0 else 1
         C = np.where((C.mean(1) < 0.03)[:, None], BLACK_FUR[None, :3], C)
-        add(name, V, T, C, N, {"ear_%d" % i: np.ones(n)}, np.full(n, 0.006), np.tile([0.0, 0.0, 1.0], (n, 1)), 0.1,
+        C = np.where(np.arange(n)[:, None] < n // 2, C * 0.7, C)        # the inside of the ear a little darker
+        add(name, V, T, C, N, {"ear_%d" % i: np.ones(n)}, np.full(n, 0.006), np.tile([0.0, 0.0, 1.0], (n, 1)), DARK_TIP,
             np.ones(n), lift=0.3, droop=0.0)
     elif name == "lidclosed":
         add(name, V, T, C, N, {"head": np.ones(n)}, np.full(n, 0.004), np.tile([-1.0, 0.0, -0.3], (n, 1)), 0.1,

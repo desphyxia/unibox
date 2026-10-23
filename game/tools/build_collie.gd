@@ -91,7 +91,7 @@ func _initialize() -> void:
 		"shadows": {"sit": [Vector2(14, 200), Vector2(-14, 200)], "stand": [Vector2(14, 200), Vector2(-14, 200)],
 			"sleep": [Vector2(8, 230), Vector2(-8, 230)]},
 		"walk": {"stride": 70.0, "stance": STANCE}, "eat_drop": Vector2(10, 60), "touch": Vector2(175, 230),
-		"fur": {"root_shade": 0.9, "strand_freq": 150.0, "tuft_freq": 18.0},
+		"fur": {"root_shade": 0.95, "strand_freq": 230.0, "tuft_freq": 26.0, "sheen": 0.5, "sheen_rough": 0.42},
 		"blanket": Vector3(60, 230, 90)})
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
