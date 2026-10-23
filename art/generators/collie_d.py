@@ -85,36 +85,77 @@ HS = 1.3                                                     # the head a little
 HEAD_R = rot((0, 0, 1), 15.0) @ rot((0, 1, 0), 9.0) @ rot((1, 0, 0), 10.0)   # a little toward us, nose down, a tilt
 
 
+# the face is modelled short and stretched forward from just in front of the eyes, so the muzzle is long as in the
+# painting: head-local x = face_w(modelled x); the eyes and the skull are not changed
+FACE_X0, FACE_S, FACE_K = 0.165, 0.01, float(os.environ.get("FACE_K", "2.0"))
+
+
+def face_w(x):
+    return x + (FACE_K - 1) * FACE_S * np.logaddexp(0.0, (x - FACE_X0) / FACE_S)
+
+
+def face_dw(x):
+    return 1 + (FACE_K - 1) / (1 + np.exp(-(x - FACE_X0) / FACE_S))
+
+
+def face_winv(x):
+    d = np.array(x, np.float64)
+    for _ in range(10):                                       # Newton: face_w is convex, so this comes down to the root
+        d = d - (face_w(d) - x) / face_dw(d)
+    return d
+
+
 def to_world(L):
-    return HEAD_C + (np.asarray(L) * HS) @ HEAD_R.T
+    L = np.array(L, np.float64)
+    L[..., 0] = face_w(L[..., 0])
+    return HEAD_C + (L * HS) @ HEAD_R.T
+
+
+def to_world_rigid(V, a):
+    """a small part placed where the stretch puts its anchor a, but not stretched itself"""
+    return to_world(a) + ((np.asarray(V) - a) * HS) @ HEAD_R.T
 
 
 def to_head(P):
-    return ((np.asarray(P) - HEAD_C) @ HEAD_R) / HS
+    L = ((np.asarray(P) - HEAD_C) @ HEAD_R) / HS
+    L[..., 0] = face_winv(L[..., 0])
+    return L
 
 
 def hdir(v):
     return np.asarray(v) @ HEAD_R.T
 
 
-NOSE = (np.array([0.238, 0.0, -0.032]), np.array([0.031, 0.037, 0.026]))
+NOSE = (np.array([0.241, 0.0, -0.03]), np.array([0.032, 0.037, 0.029]))
 JAW_HINGE = np.array([-0.04, 0.0, -0.088])
 
 
+def nose_space(L):
+    """modelled head-local points, in true lengths round the nose's centre (so the stretch moves the nose, not shapes it)"""
+    L = np.array(L, np.float64)
+    L[:, 0] = face_w(L[:, 0]) - face_w(NOSE[0][0]) + NOSE[0][0]
+    return L
+
+
 def nose_body(L):
+    return nose_body_true(nose_space(L))
+
+
+def nose_body_true(L):
     """the nose leather without its nostrils: flat on top, rounded in front, flat below, narrower at the bottom"""
     c, r = NOSE
     q = L - c
     sy = 1.0 + 0.2 * np.clip(-q[:, 2] / r[2], 0, 1)               # narrower toward the bottom
     d = ellipsoid(np.stack([q[:, 0], q[:, 1] * sy, q[:, 2]], 1), np.zeros(3), r) * 0.9
-    d = smax(d, q[:, 2] - (0.7 * r[2] + 0.06 * q[:, 0]), 0.016)            # the flat top, a touch raised at the front
+    d = smax(d, q[:, 2] - (0.78 * r[2] + 0.06 * q[:, 0]), 0.016)            # the flat top, a touch raised at the front
     d = smax(d, -(q[:, 2] + 0.66 * r[2]), 0.006)                             # the flat underside
     return d
 
 
 def nose_sdf(L):
     c, r = NOSE
-    d = nose_body(L)
+    L = nose_space(L)
+    d = nose_body_true(L)
     # the groove down the front, from between the nostrils to the lip
     d = smax(d, -round_cone(L, c + np.array([0.026, 0.0, -0.002]), c + np.array([0.03, 0.0, -0.03]), 0.0012, 0.0032), 0.002)
     for s in (1, -1):                                         # nostrils: a round opening with a slit running out and back
@@ -125,15 +166,19 @@ def nose_sdf(L):
 JAW_OPEN = rot((0, 1, 0), 12.0)                              # the jaw dropped open in a smile
 
 
+SKULL_W = float(os.environ.get("SKULL_W", "0.88"))           # the skull's and cheeks' width, as a share of the first build
+SKULL_H = float(os.environ.get("SKULL_H", "0.9"))           # the skull's height
+
+
 def upper(L):
     """skull, brows, cheeks, muzzle, upper lips and the nose pad"""
-    d = ellipsoid(L, np.array([-0.035, 0.0, 0.026]), (0.145, 0.134, 0.108))
-    d = smin(d, ellipsoid(L, np.array([0.04, 0.0, 0.02]), (0.085, 0.1, 0.075)), 0.06)            # forehead
+    d = ellipsoid(L, np.array([-0.035, 0.0, 0.026]), (0.145 + 0.02 * (1 - SKULL_H), 0.134 * SKULL_W, 0.108 * SKULL_H))
+    d = smin(d, ellipsoid(L, np.array([0.04, 0.0, 0.02 - 0.06 * (1 - SKULL_H)]), (0.085, 0.1 * SKULL_W, 0.075 * SKULL_H)), 0.06)   # forehead
     d = smin(d, ellipsoid(L, np.array([-0.16, 0.0, 0.05]), (0.05, 0.06, 0.06)), 0.05)            # occiput
     for s in (1, -1):
         d = smin(d, ellipsoid(L, np.array([0.072, 0.047 * s, 0.05]), (0.045, 0.04, 0.03)), 0.03)  # brows
-        d = smin(d, ellipsoid(L, np.array([-0.01, 0.088 * s, -0.035]), (0.09, 0.068, 0.07)), 0.06)  # cheekbones
-    d = smin(d, squash(round_cone, L, 0.95, (0.06, 0.0, -0.03), (0.218, 0.0, -0.054), 0.07, 0.037), 0.05)   # muzzle
+        d = smin(d, ellipsoid(L, np.array([-0.01, 0.088 * s * SKULL_W, -0.035]), (0.09, 0.068 * SKULL_W, 0.07)), 0.06)  # cheekbones
+    d = smin(d, squash(round_cone, L, 0.95, (0.06, 0.0, -0.032), (0.204, 0.0, -0.053), 0.075, 0.037), 0.065)   # muzzle: deep at the base, tapering
     for s in (1, -1):                                         # upper lips, hanging over the jaw, rising at the back
         d = smin(d, round_cone(L, np.array([0.0, 0.056 * s, -0.05]), np.array([0.183, 0.033 * s, -0.072]), 0.022, 0.03), 0.03)
     d = smin(d, nose_body(L) + 0.002, 0.012)                 # the pad under the nose leather
@@ -709,7 +754,7 @@ def build_eyes():
 
 def build_nose():
     c, r = NOSE
-    h = 0.0005
+    h = 0.0005 / FACE_K ** 0.5
     F, o = sample(nose_sdf, c - r * 1.3, c + r * 1.3, h)
     V, T = surface_nets(F, o, h)
     V = project(nose_sdf, V, 2)
@@ -721,6 +766,7 @@ def build_nose():
     col = mix(col, hexc("#3a333a"), (smooth(0.1, 0.8, q[:, 2]) * 0.55)[:, None])   # the top a little lighter
     rng = np.random.default_rng(5)                            # a pebbled leather, as colour variation
     col *= (0.85 + 0.3 * rng.random(len(V)))[:, None]
+    N = unit(N / face_dw(V[:, 0])[:, None] ** np.array([1.0, 0.0, 0.0]))   # normals through the stretch
     mesh("nose", to_world(V), T, col * 0.4, principled("nose", rough=0.45, spec=0.3, coat=0.12), hdir(N))
 
 
@@ -778,7 +824,7 @@ def build_mouth():
                 b = JAW_HINGE + (b - JAW_HINGE) @ JAW_OPEN.T
             pts = np.array([b, b + np.array([0.0, 0.0, dz * 0.55]), b + np.array([0.003, -0.002 * s_, dz])])
             Vt, Ft = Ub.tube(pts, np.array([0.0062, 0.0048, 0.001]), 10)
-            mesh("tooth", to_world(Vt), np.array(Ft), None, tm)
+            mesh("tooth", to_world_rigid(Vt, b), np.array(Ft), None, tm)
 
 
 # ================================================================== the skin
@@ -791,10 +837,13 @@ def skin_sdf(P):
 
 def build_skin(h):
     if HEAD_ONLY:
-        lo, hi = HEAD_C - 0.36, HEAD_C + 0.36
+        lo, hi = HEAD_C - 0.36, HEAD_C + np.array([0.52, 0.36, 0.36])
     else:
-        lo, hi = np.array([-0.95, -0.36, -0.01]), np.array([1.12, 0.36, 1.56])   # room for the nose tip and the crown
+        lo, hi = np.array([-0.95, -0.36, -0.01]), np.array([1.3, 0.36, 1.56])    # room for the nose tip and the crown
     F, o = sample(skin_sdf, lo, hi, h)
+    rim = min(F[[0, -1]].min(), F[:, [0, -1]].min(), F[:, :, [0, -1]].min())
+    if rim < 0:                                              # the skin must not reach the box, or it is cut open there
+        raise SystemExit("the skin reaches the edge of its box (%.4f): make the box bigger" % rim)
     V, T = surface_nets(F, o, h)
     V = project(skin_sdf, V, 2)
     N = grad(skin_sdf, V)
@@ -1489,6 +1538,7 @@ VIEWS_AT = {   # azimuth from +y toward +x, elevation, focus, distance, focal le
     "hface": (54.0, 8.0, "hface", 1.9, 85.0),
     "front": (88.0, 3.0, None, 1.3, 85.0),
     "side": (0.0, 2.0, None, 1.4, 85.0),
+    "hside": (20.0, 3.0, "hface", 2.3, 85.0),
     "top": (60.0, 70.0, None, 1.5, 85.0),
     "back": (200.0, 10.0, None, 1.5, 85.0),
     "hero": (58.0, 6.0, (0.17, 0.0, 0.72), 4.7, 70.0),
