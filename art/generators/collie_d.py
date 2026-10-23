@@ -99,7 +99,7 @@ def hdir(v):
 
 NOSE = (np.array([0.242, 0.0, -0.03]), np.array([0.029, 0.037, 0.026]))
 JAW_HINGE = np.array([-0.04, 0.0, -0.088])
-JAW_OPEN = rot((0, 1, 0), 21.0)                              # the jaw dropped open in a smile
+JAW_OPEN = rot((0, 1, 0), 12.0)                              # the jaw dropped open in a smile
 
 
 def upper(L):
@@ -112,7 +112,7 @@ def upper(L):
         d = smin(d, ellipsoid(L, np.array([-0.01, 0.088 * s, -0.035]), (0.09, 0.068, 0.07)), 0.06)  # cheekbones
     d = smin(d, squash(round_cone, L, 0.95, (0.06, 0.0, -0.03), (0.218, 0.0, -0.054), 0.07, 0.037), 0.05)   # muzzle
     for s in (1, -1):                                         # upper lips, hanging over the jaw, rising at the back
-        d = smin(d, round_cone(L, np.array([0.02, 0.054 * s, -0.06]), np.array([0.183, 0.033 * s, -0.072]), 0.024, 0.03), 0.03)
+        d = smin(d, round_cone(L, np.array([0.0, 0.056 * s, -0.05]), np.array([0.183, 0.033 * s, -0.072]), 0.022, 0.03), 0.03)
     d = smin(d, ellipsoid(L, NOSE[0], NOSE[1]), 0.015)
     return d
 
@@ -123,8 +123,8 @@ def jaw_closed(L):
 
 def lower(L):
     Q = jaw_closed(L)
-    d = squash(round_cone, Q, 0.95, (0.0, 0.0, -0.122), (0.18, 0.0, -0.124), 0.038, 0.022)
-    return smin(d, ellipsoid(Q, np.array([0.14, 0.0, -0.137]), (0.045, 0.029, 0.02)), 0.03)        # chin
+    d = squash(round_cone, Q, 0.95, (0.0, 0.0, -0.118), (0.162, 0.0, -0.118), 0.033, 0.019)
+    return smin(d, ellipsoid(Q, np.array([0.125, 0.0, -0.128]), (0.04, 0.025, 0.015)), 0.03)        # chin
 
 
 def head_raw(L):
@@ -133,7 +133,7 @@ def head_raw(L):
 
 # ------------------------------------------------------------------ eyes
 EYE_R = 0.029
-EYE_HALF = (0.033, 0.0195)                                    # the lids' opening: half width, half height
+EYE_HALF = (0.032, 0.022)                                    # the lids' opening: half width, half height
 
 
 def eye_frame(side):
@@ -153,10 +153,10 @@ EYES = {s: eye_frame(s) for s in (1, -1)}
 def almond(a, b):
     """the lids' opening in the eye's plane (a toward the nose, b up): <0 inside"""
     A, B = EYE_HALF
-    b = b + 0.06 * a                                          # the outer corner a touch lower: a soft look
+    b = b + 0.12 * a                                          # the outer corner a little lower: a kind look
     x = np.clip(np.abs(a) / A, 0.0, 1.0)
-    top = B * (1.0 - x ** 2.0) ** 0.55
-    bot = B * 0.85 * (1.0 - x ** 2.0) ** 0.75
+    top = B * 0.9 * (1.0 - x ** 2.0) ** 0.62
+    bot = B * 0.78 * (1.0 - x ** 2.0) ** 0.7
     return np.maximum(np.abs(a) - A, np.abs(b) - np.where(b >= 0, top, bot))
 
 
@@ -270,7 +270,7 @@ WHITE_SHADE = hexc("#d9d3c8")
 def lip_lines(L):
     """distance to the upper lip's edge and to the lower lip's edge (head-local), and the mouth-inside mask"""
     x, y, z = L[:, 0], L[:, 1], L[:, 2]
-    zu = -0.102 + 0.022 * smooth(0.12, 0.0, x)                # upper lip edge, rising to the corner
+    zu = -0.102 + 0.03 * smooth(0.14, -0.01, x)               # upper lip edge, rising to the corner: a smile
     Q = jaw_closed(L)
     zl = -0.1 + 0.015 * smooth(0.08, 0.0, Q[:, 0])
     du = np.abs(z - zu)
@@ -295,7 +295,7 @@ def head_colours(L, N):
     w = np.clip(np.maximum(np.maximum(blaze, muz), lowj), 0, 1)
     c = mix(c, WHITE, w)
     # leather and lips
-    lips_u = smooth(0.016, 0.009, du) * smooth(-0.01, 0.02, x)
+    lips_u = smooth(0.02, 0.012, du) * smooth(-0.01, 0.02, x)
     lips_l = smooth(0.014, 0.008, dl) * smooth(-0.01, 0.02, Q[:, 0])
     c = mix(c, hexc("#141114"), np.maximum(lips_u, lips_l))
     c = np.where(inside[:, None], hexc("#4a1c22"), c)
@@ -411,10 +411,11 @@ def body_white(P, N, part):
     x, y, z = P[:, 0], P[:, 1], P[:, 2]
     w = np.zeros(len(P))
     nf = neck_front(P)
-    collar = smooth(-0.55, -0.3, nf - 0.25 * smooth(0.98, 1.12, z)) * smooth(0.8, 0.88, z)       # the ruff round the neck
-    chest = smooth(0.4, 0.46, x + 0.08 * smooth(0.6, 0.35, z) - 0.25 * np.abs(y)) * smooth(0.95, 0.85, z)   # the bib
-    w = np.maximum(collar, chest) * np.isin(part, [1, 2])
-    w = np.maximum(w, (part == 3) * smooth(0.5, 0.44, z - 0.2 * N[:, 0]))                       # the front legs
+    throat = smooth(0.35, 0.55, nf) * smooth(0.8, 0.88, z)                    # the throat: white in front only
+    chest = smooth(0.42, 0.48, x + 0.08 * smooth(0.6, 0.35, z) - 0.5 * np.abs(y)) * smooth(0.95, 0.85, z)   # a narrow bib
+    w = np.maximum(throat, chest) * np.isin(part, [1, 2])
+    behind = smooth(-0.1, -0.4, N[:, 0]) * smooth(0.16, 0.3, z)               # black feathering behind the front legs
+    w = np.maximum(w, (part == 3) * smooth(0.5, 0.44, z - 0.2 * N[:, 0]) * (1 - behind))   # the front legs
     w = np.maximum(w, (part == 4) * smooth(0.26, 0.2, z))                                       # the hind feet
     w = np.maximum(w, (part == 5) * 1.0)                                                        # paws
     w = np.maximum(w, (part == 6) * smooth(0.72, 0.82, tail_t(P)))                              # the tail's tip
@@ -629,7 +630,7 @@ def build_eyes():
     for side in (1, -1):
         E, n, u, v = EYES[side]
         to_cam = unit((cam_pos("hero") - to_world(E)) @ HEAD_R)     # toward the camera, in the head's frame
-        look = unit(n * 0.35 + to_cam * 0.65)
+        look = unit(n * 0.35 + to_cam * 0.65 - v * 0.2)                # a touch low, so the upper lid rests on the iris
         c = E - n * EYE_R * 0.88
         upv = unit(v - look * (v @ look))
         a = np.cross(upv, look)
@@ -642,29 +643,39 @@ def build_eyes():
         phi = np.arctan2(S[:, 1], S[:, 0])
         r = ang / 54.0                                        # 0 at the centre, 1 at the iris' edge
         fib = 0.5 + 0.5 * np.sin(phi * 37 + rng.uniform(0, 6)) * np.sin(phi * 13 + 1.3)
-        iris = mix(hexc("#b8682a"), hexc("#6a2e10"), smooth(0.4, 0.95, r)[:, None] * 0.9)
-        iris = mix(iris, hexc("#e0a048"), (smooth(0.75, 0.45, np.abs(r - 0.55)) * fib * 0.3)[:, None])
+        iris = mix(hexc("#7e4622"), hexc("#3a1c0e"), smooth(0.5, 0.98, r)[:, None] * 0.85)
+        iris = mix(iris, hexc("#c27a38"), (smooth(0.1, -0.7, S[:, 1]) * smooth(0.95, 0.6, r) * 0.55)[:, None])   # lit from below
+        iris = mix(iris, hexc("#c08048"), (smooth(0.75, 0.45, np.abs(r - 0.6)) * fib * 0.25)[:, None])
         iris = mix(iris, hexc("#6a2e0e"), (smooth(0.4, 0.3, r) * 0.6)[:, None])       # the collarette
-        iris = mix(iris, hexc("#2a1206"), (smooth(0.82, 1.0, r))[:, None])            # the dark rim round the iris
-        iris = mix(iris, hexc("#5a2a0c"), (smooth(0.1, -0.6, S[:, 1]) * 0.35)[:, None])   # the lid's shadow above
+        iris = mix(iris, hexc("#2e1608"), (smooth(0.9, 1.0, r) * 0.5)[:, None])       # a soft dark rim round the iris
+        iris = mix(iris, hexc("#3a1a08"), (smooth(-0.1, 0.6, S[:, 1]) * 0.45)[:, None])   # the lid's shadow above
         col = np.where((r < 1.0)[:, None], iris, hexc("#2a1a14"))
-        col = mix(col, hexc("#050304"), smooth(0.46, 0.42, r)[:, None])                # the pupil
+        col = mix(col, hexc("#060404"), smooth(0.56, 0.51, r)[:, None])                # the pupil
         mesh("eyeball", to_world(Vb), F, col, principled("eyeball", rough=0.35, spec=0.3))
         # the cornea: a clear dome over the iris
         bulge = 1.0 + 0.09 * smooth(0.55, 1.0, ca) ** 1.5
         Vc = c + (S * EYE_R * 1.03 * bulge[:, None]) @ Rm.T
         mesh("cornea", to_world(Vc), F, None, principled("cornea", color=(1, 1, 1, 1), rough=0.0, spec=0.8,
                                                          transmission=1.0, ior=1.376))
+        # a soft catchlight, high on the eye toward the light, as in the painting
+        gd = unit(look + upv * 0.45 - a * 0.25)
+        gc = c + gd * EYE_R * 1.1
+        ga = unit(np.cross(gd, upv))
+        gb = np.cross(ga, gd)
+        ring = [gc + (ga * np.cos(t) + gb * np.sin(t)) * EYE_R * 0.16 for t in np.linspace(0, 2 * np.pi, 20, endpoint=False)]
+        Vg = np.array([gc + gd * 0.0004] + ring)
+        mesh("catchlight", to_world(Vg), np.array([(0, k + 1, (k + 1) % 20 + 1) for k in range(20)]), None,
+             principled("catchlight", color=(1, 1, 1, 1), emit=2.5, rough=0.5))
         # lid rims: a dark, slightly glossy rim round the opening
         A, B = EYE_HALF
         pts = []
         for t in np.linspace(0, 2 * np.pi, 72, endpoint=False):
             aa = A * 1.02 * np.cos(t)
             x = min(abs(aa) / A, 1.0)
-            lim = B * (1.0 - x ** 2.0) ** 0.55 if np.sin(t) >= 0 else -B * 0.85 * (1.0 - x ** 2.0) ** 0.75
-            pts.append(E + u * aa + v * (lim * 1.03 - 0.06 * aa))
+            lim = B * 0.9 * (1.0 - x ** 2.0) ** 0.62 if np.sin(t) >= 0 else -B * 0.78 * (1.0 - x ** 2.0) ** 0.7
+            pts.append(E + u * aa + v * (lim * 1.03 - 0.12 * aa))
         pts = surface_pts(head_raw, np.array(pts + pts[:1]), 0.0015)
-        Vt, Ft = Ub.tube(pts, np.full(len(pts), 0.0019), 8)
+        Vt, Ft = Ub.tube(pts, np.full(len(pts), 0.0015), 8)
         mesh("lidrim", to_world(Vt), np.array(Ft), None, principled("lidrim", color=hexc("#070506"), rough=0.55, spec=0.3))
 
 
@@ -693,14 +704,14 @@ def build_mouth():
     m, k = 40, 17
     s = np.linspace(0, 1, m)
     path = []
-    lip = JAW_HINGE + (np.array([0.184, 0.004, -0.097]) - JAW_HINGE) @ JAW_OPEN.T   # where it leaves the mouth
+    lip = JAW_HINGE + (np.array([0.168, 0.004, -0.092]) - JAW_HINGE) @ JAW_OPEN.T   # where it leaves the mouth
     for t in s:
         if t < 0.62:                                          # on the floor of the open jaw
-            q = np.array([0.04 + (0.184 - 0.04) * t / 0.62, 0.004, -0.097])
+            q = np.array([0.04 + (0.168 - 0.04) * t / 0.62, 0.004, -0.092])
             p = JAW_HINGE + (q - JAW_HINGE) @ JAW_OPEN.T
         else:                                                 # over the lip, falling under its own weight
             a = (t - 0.62) / 0.38 * np.radians(95)
-            p = lip + np.array([0.022 * np.sin(a), 0.004 * (t - 0.62), -0.04 * (1 - np.cos(a))])
+            p = lip + np.array([0.02 * np.sin(a), 0.004 * (t - 0.62), -0.03 * (1 - np.cos(a))])
         path.append(p)
     path = np.array(path)
     for _ in range(4):
@@ -997,7 +1008,7 @@ def head_groom(L):
 
 def lip_mask(L):
     du, dl, inside, Q = lip_lines(L)
-    return inside | (du < 0.012) | (dl < 0.011)
+    return inside | (du < 0.016) | (dl < 0.012)
 
 
 def head_fur(coat, R, N, field, rng):
