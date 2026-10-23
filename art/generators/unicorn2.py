@@ -8,8 +8,13 @@ Everything here is new (none of unicorn3d.py, artgen5.py or their helpers):
   unicorn2_shape.py  the body as one signed distance field, meshed by surface nets
   this file          eyes in real sockets, lids and lashes, ears, the spiral horn, hair locks draped over the body,
                      flowers, hooves, freckles, glitter, colours, lights and cameras
-Run:   blender -b --factory-startup -P unicorn2.py -- OUTDIR [--quick] [--clay] [view ...]
+Run:   blender -b --factory-startup -P unicorn2.py -- OUTDIR [--quick] [--clay] [--hair v1|v2] [view ...]
        views: hero side front back head
+       --hair v1  the first hair: one solid ribbon a lock (kept for comparison)
+       --game     with v2: the hair at game density (fewer segments round and along each strand)
+       --hair v2  hair a game can draw too: locks that split into wisps toward the end, stray strands, combed flow,
+                  and a strand shader (a shine along the hair, fine lengthwise grooves and streaks, lighter tips,
+                  darker under-layers, light through thin edges) using only per-vertex data and per-pixel noise
 """
 import bpy, bmesh, math, os, sys, random
 import numpy as np
@@ -23,7 +28,9 @@ argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = argv[0] if argv else "unicorn2_out"
 QUICK = "--quick" in argv
 CLAY = "--clay" in argv
-VIEWS = [a for a in argv[1:] if not a.startswith("--")] or ["hero"]
+HAIR_STYLE = argv[argv.index("--hair") + 1] if "--hair" in argv else "v1"
+GAME_LOD = "--game" in argv                                     # v2 hair at a density the game could draw live
+VIEWS = [a for a in argv[1:] if not a.startswith("--") and a not in ("v1", "v2")] or ["hero"]
 os.makedirs(OUT, exist_ok=True)
 rnd = random.Random(7)
 H = 0.03 if QUICK else 0.014                                   # the body's grid spacing
@@ -112,7 +119,7 @@ def material(name, rough=0.5, sss=0.0, sheen=0.0, spec=0.4, coat=0.0, emit=0.0, 
     return m
 
 
-def add_mesh(name, V, T, cols, mat, normals=None, smooth_shade=True):
+def add_mesh(name, V, T, cols, mat, normals=None, smooth_shade=True, attrs=None):
     me = bpy.data.meshes.new(name)
     me.from_pydata([tuple(v) for v in np.asarray(V, np.float64)], [], [tuple(int(i) for i in t) for t in T])
     me.update()
@@ -122,6 +129,10 @@ def add_mesh(name, V, T, cols, mat, normals=None, smooth_shade=True):
             cols = np.concatenate([cols, np.ones((len(cols), 1))], 1)
         a = me.color_attributes.new("Col", "FLOAT_COLOR", "POINT")
         a.data.foreach_set("color", cols.astype(np.float32).ravel())
+    for an, arr in (attrs or {}).items():
+        arr = np.asarray(arr, np.float32)
+        at = me.attributes.new(an, "FLOAT_VECTOR", "POINT")
+        at.data.foreach_set("vector", arr.ravel())
     if smooth_shade:
         me.polygons.foreach_set("use_smooth", [True] * len(me.polygons))
     if normals is not None:
@@ -605,7 +616,9 @@ def build_hair():
     mat = material("hair", rough=0.36, sss=0.12, sheen=0.55, spec=0.45)
     seed = [100]
 
-    def emit(curves, widths, kind, thick=0.36, **shape):
+    def emit(curves, widths, kind, thick=0.36, layer=0, **shape):
+        if HAIR_STYLE == "v2":
+            return emit_v2(curves, widths, kind, thick, layer, shape, seed)
         for i, c in enumerate(curves):
             seed[0] += 1
             rng = np.random.default_rng(seed[0])
@@ -629,12 +642,12 @@ def build_hair():
     roots2 = crest[1::2] + np.array([0.0, 0.1, 0.08])
     curves = drape(roots2, np.tile(np.array([-0.05, 1.0, 1.0]), (len(roots2), 1)), np.linspace(2.0, 1.7, len(roots2)), gravity=1.9,
                    drift=np.array([-0.35, 0.4, 0.0]), clear=0.15)
-    emit(curves, np.full(len(roots2), 0.32), "mane", thick=0.3, curl=[0.0, 0.45, 0.0, 0.0], curl_r=0.32, curl_from=0.72, wave=0.07)
+    emit(curves, np.full(len(roots2), 0.32), "mane", thick=0.3, layer=1, curl=[0.0, 0.45, 0.0, 0.0], curl_r=0.32, curl_from=0.72, wave=0.07)
     # the far side
     roots3 = crest[::2] + np.array([0.0, -0.04, 0.03])
     curves = drape(roots3, np.tile(np.array([-0.15, -1.0, 0.6]), (len(roots3), 1)), np.linspace(2.3, 1.9, len(roots3)), gravity=2.1,
                    drift=np.array([-0.2, -0.3, 0.0]), clear=0.07)
-    emit(curves, np.full(len(roots3), 0.34), "mane", thick=0.3, curl=[0.0, 0.5, 0.0], curl_r=0.3, curl_from=0.72, wave=0.06)
+    emit(curves, np.full(len(roots3), 0.34), "mane", thick=0.3, layer=-1, curl=[0.0, 0.5, 0.0], curl_r=0.3, curl_from=0.72, wave=0.06)
 
     # the forelock: from the crown behind the horn, sweeping forward over the far side of the forehead to the cheek
     c, r = U.CRANIUM
@@ -651,7 +664,7 @@ def build_hair():
     nl = np.array([U.head_to_world(U._ray_hit(U._head_raw, c, np.array([v[0], v[1], 1.0]))) for v in ((0.02, 0.3), (-0.15, 0.38))])
     ndirs = np.array([U.head_dir(np.array(v)) for v in ((-0.2, 1.0, 0.5), (-0.4, 1.0, 0.4))])
     curves = drape(nl, ndirs, [1.3, 1.5], gravity=2.5, drift=np.array([-0.45, 0.2, 0.0]), clear=0.06)
-    emit(curves, [0.24, 0.26], "forelock", thick=0.3, curl=[0.3, 0.0], curl_r=0.22, curl_from=0.74)
+    emit(curves, [0.24, 0.26], "forelock", thick=0.3, layer=1, curl=[0.3, 0.0], curl_r=0.22, curl_from=0.74)
 
     # the tail: from the top of the rump, a little up and back, then falling in a long soft S, the tips curling out
     base = U._ray_hit(U.sdf_uncarved, np.array([-0.5, 0.0, 2.6]), np.array([-1.0, 0.0, 0.42]))
@@ -895,6 +908,185 @@ def build_sparkle(body_ob):
     add_mesh("glitter", np.vstack(Vs), Fs, None, material("glitter", rough=0.2, emit=1.2, color=(1, 1, 1, 1)))
 
 
+# ------------------------------------------------------------------ hair v2
+HAIR_TRIS = [0]
+
+
+def frames(c):
+    """tangent, outward normal (away from the body, kept from flipping and smoothed) and binormal along a centre line"""
+    T_ = np.gradient(c, axis=0)
+    T_ /= np.maximum(np.linalg.norm(T_, axis=1, keepdims=True), 1e-9)
+    out = U.grad(obstacles, c)
+    N = out - T_ * np.sum(out * T_, 1, keepdims=True)
+    for i in range(1, len(c)):
+        if N[i] @ N[i - 1] < 0:
+            N[i] = -N[i]
+    N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
+    for _ in range(4):
+        N[1:-1] = (N[:-2] + 2 * N[1:-1] + N[2:]) / 4
+        N -= T_ * np.sum(N * T_, 1, keepdims=True)
+        N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-9)
+    return T_, N, np.cross(T_, N)
+
+
+def smooth_line(c, passes=6):
+    c = c.copy()
+    for _ in range(passes):
+        c[1:-1] = (c[:-2] + 2 * c[1:-1] + c[2:]) / 4
+    return c
+
+
+def strand_mesh(c, w, thick, cols, ring, shade):
+    """a flattened tube along c with width w (per point); also the data the strand shader needs per vertex:
+    Tan = along the hair, Hst = (cos, sin round the lock, place along it)"""
+    T_, N, B = frames(c)
+    m = len(c)
+    t = np.linspace(0, 1, m)
+    V, C, TA, HS = [], [], [], []
+    for i in range(m):
+        for k in range(ring):
+            th = 2 * np.pi * k / ring
+            V.append(c[i] + B[i] * (w[i] * np.cos(th)) + N[i] * (w[i] * thick * np.sin(th)))
+            col = cols(t[i]) * shade
+            col[3] = 1.0
+            C.append(col)
+            TA.append(T_[i])
+            HS.append((np.cos(th), np.sin(th), t[i]))
+    F = grid_faces(m, ring, wrap_v=True)
+    V.append(c[0] - T_[0] * 0.01)
+    C.append(cols(0.0) * shade)
+    C[-1][3] = 1.0
+    TA.append(T_[0])
+    HS.append((0.0, 0.0, 0.0))
+    cb = len(V) - 1
+    for k in range(ring):
+        F.append((cb, (k + 1) % ring, k))
+    return np.array(V), F, np.array(C), np.array(TA), np.array(HS)
+
+
+def taper(m, tip_from=0.5, swell=0.25):
+    t = np.linspace(0, 1, m)
+    return (1 + swell * np.sin(np.pi * np.minimum(1.0, t * 1.6))) * (1 - smooth(tip_from, 1.0, t) ** 0.85) + 0.012
+
+
+def emit_v2(curves, widths, kind, thick, layer, shape, seed):
+    """each lock: a smoothed, combed centre line; toward its end it splits into sub-locks that fan apart and end in
+    fine wisps; a couple of stray strands drift off its edges"""
+    mat = hair_material_v2()
+    shade = {1: 1.05, 0: 1.0, -1: 0.86}[layer]
+    curls = shape.get("curl", [0])
+    parts = []
+    n = len(curves)
+    for i, c in enumerate(curves):
+        seed[0] += 1
+        rng = np.random.default_rng(seed[0])
+        cc = resample(c, 80)
+        # neighbours wave together, as combed hair does
+        cc = shape_lock(cc, wave=shape.get("wave", 0.07) * 0.8, freq=1.05, phase=1.6 * i / max(n - 1, 1),
+                        curl=curls[i % len(curls)] * 0.75, curl_r=shape.get("curl_r", 0.3) * 1.25, curl_from=shape.get("curl_from", 0.74))
+        cc = smooth_line(cc)
+        T_, N, B = frames(cc)
+        W = widths[i]
+        cols = hair_colours(kind, seed[0])
+        t = np.linspace(0, 1, len(cc))
+        k_sub = 3 if W > 0.26 else 2
+        split = rng.uniform(0.42, 0.55)
+        fan = smooth(split, 1.0, t)
+        for j in range(k_sub):
+            side = (j - (k_sub - 1) / 2) / max((k_sub - 1) / 2, 1)
+            off = side * W * 0.42 * (0.35 + 0.65 * fan)               # side by side, then spreading apart
+            lift = rng.uniform(-0.3, 0.3) * W * fan
+            sub = cc + B * off[:, None] + N * lift[:, None]
+            ln = rng.uniform(0.82, 1.0) if j != (k_sub // 2) else 1.0
+            mm = max(8, int(len(sub) * ln))
+            ns, rs = (24, 7) if GAME_LOD else (64, 16)
+            sub = resample(sub[:mm], ns)
+            w = W * (0.58 if k_sub == 3 else 0.7) * taper(ns, tip_from=rng.uniform(0.35, 0.55))
+            parts.append(strand_mesh(sub, w, thick * 0.9, cols, rs, shade * rng.uniform(0.95, 1.04)))
+        # a body under the split, so the lock reads as one near its root
+        nc, rc = (14, 8) if GAME_LOD else (40, 18)
+        core = resample(cc[: int(len(cc) * (split + 0.2))], nc)
+        w = W * 0.85 * taper(nc, tip_from=0.6, swell=0.15)
+        parts.append(strand_mesh(core, w, thick, cols, rc, shade * 0.97))
+        # stray strands off the edges
+        for j in range(0 if kind == "forelock" else 1):
+            side = rng.choice([-1, 1])
+            st = cc + B * (side * W * rng.uniform(0.45, 0.65) * (0.4 + 0.6 * fan))[:, None]
+            st = st + N * (W * 0.25 * np.sin(np.pi * t * rng.uniform(1.0, 2.0)) * fan)[:, None]
+            a0 = int(len(st) * rng.uniform(0.2, 0.4))
+            nst, rst = (10, 4) if GAME_LOD else (30, 6)
+            st = resample(st[a0: int(len(st) * rng.uniform(0.85, 1.0))], nst)
+            parts.append(strand_mesh(st, np.full(nst, 0.014) * taper(nst, 0.4, 0.0), 1.0, cols, rst, shade * 1.06))
+    Vs, Fs, Cs, Ts, Hs, base = [], [], [], [], [], 0
+    for V, F, C, TA, HS in parts:
+        Vs.append(V)
+        Fs += [(f[0] + base, f[1] + base, f[2] + base) for f in F]
+        Cs.append(C)
+        Ts.append(TA)
+        Hs.append(HS)
+        base += len(V)
+    HAIR_TRIS[0] += len(Fs)
+    add_mesh(kind, np.vstack(Vs), Fs, np.vstack(Cs), mat, attrs={"Tan": np.vstack(Ts), "Hst": np.vstack(Hs)})
+
+
+def hair_material_v2():
+    """the strand shader: anisotropic shine along the hair (the tangent attribute), fine lengthwise streaks and grooves
+    from noise stretched along it (Hst), lighter tips, a little light through the thin edges. All of it is per-vertex
+    data plus per-pixel noise, which a game shader can do as well."""
+    if "hair2" in MATS:
+        return MATS["hair2"]
+    m = bpy.data.materials.new("hair2")
+    m.use_nodes = True
+    nt = m.node_tree
+    nd, ln = nt.nodes, nt.links
+    bs = nd["Principled BSDF"]
+    col = nd.new("ShaderNodeAttribute"); col.attribute_name = "Col"
+    tan = nd.new("ShaderNodeAttribute"); tan.attribute_name = "Tan"
+    hst = nd.new("ShaderNodeAttribute"); hst.attribute_name = "Hst"
+    # streak coordinates: many strands round the lock, few changes along it
+    sep = nd.new("ShaderNodeSeparateXYZ")
+    ln.new(hst.outputs["Vector"], sep.inputs[0])
+    comb = nd.new("ShaderNodeCombineXYZ")
+    for i, (ax, k) in enumerate((("X", 7.0), ("Y", 7.0), ("Z", 1.2))):
+        mul = nd.new("ShaderNodeMath"); mul.operation = "MULTIPLY"; mul.inputs[1].default_value = k
+        ln.new(sep.outputs[ax], mul.inputs[0])
+        ln.new(mul.outputs[0], comb.inputs[i])
+    fine = nd.new("ShaderNodeTexNoise"); fine.inputs["Scale"].default_value = 6.0; fine.inputs["Detail"].default_value = 3.0
+    ln.new(comb.outputs[0], fine.inputs["Vector"])
+    broad = nd.new("ShaderNodeTexNoise"); broad.inputs["Scale"].default_value = 1.6; broad.inputs["Detail"].default_value = 1.0
+    ln.new(comb.outputs[0], broad.inputs["Vector"])
+    # colour: the vertex colour, brightened and darkened in streaks
+    ramp = nd.new("ShaderNodeMapRange")
+    ramp.inputs["From Min"].default_value = 0.3; ramp.inputs["From Max"].default_value = 0.7
+    ramp.inputs["To Min"].default_value = 0.9; ramp.inputs["To Max"].default_value = 1.12
+    ln.new(fine.outputs["Fac"], ramp.inputs["Value"])
+    ramp2 = nd.new("ShaderNodeMapRange")
+    ramp2.inputs["From Min"].default_value = 0.3; ramp2.inputs["From Max"].default_value = 0.7
+    ramp2.inputs["To Min"].default_value = 0.93; ramp2.inputs["To Max"].default_value = 1.06
+    ln.new(broad.outputs["Fac"], ramp2.inputs["Value"])
+    m1 = nd.new("ShaderNodeVectorMath"); m1.operation = "SCALE"
+    ln.new(col.outputs["Color"], m1.inputs[0]); ln.new(ramp.outputs[0], m1.inputs["Scale"])
+    m2 = nd.new("ShaderNodeVectorMath"); m2.operation = "SCALE"
+    ln.new(m1.outputs[0], m2.inputs[0]); ln.new(ramp2.outputs[0], m2.inputs["Scale"])
+    ln.new(m2.outputs[0], bs.inputs["Base Color"])
+    # grooves between strands
+    bump = nd.new("ShaderNodeBump"); bump.inputs["Strength"].default_value = 0.35; bump.inputs["Distance"].default_value = 0.02
+    ln.new(fine.outputs["Fac"], bump.inputs["Height"])
+    ln.new(bump.outputs["Normal"], bs.inputs["Normal"])
+    # the shine runs along the hair
+    ln.new(tan.outputs["Vector"], bs.inputs["Tangent"])
+    bs.inputs["Anisotropic"].default_value = 0.85
+    bs.inputs["Roughness"].default_value = 0.33
+    bs.inputs["Specular IOR Level"].default_value = 0.55
+    bs.inputs["Sheen Weight"].default_value = 0.45
+    bs.inputs["Coat Weight"].default_value = 0.15
+    bs.inputs["Subsurface Weight"].default_value = 0.22
+    bs.inputs["Subsurface Radius"].default_value = (0.6, 0.35, 0.45)
+    bs.inputs["Subsurface Scale"].default_value = 0.05
+    MATS["hair2"] = m
+    return m
+
+
 # ------------------------------------------------------------------ lights and cameras
 def lights():
     def area(name, loc, target, size, energy, col):
@@ -946,6 +1138,8 @@ def main():
     build_horn()
     build_hooves()
     build_hair()
+    if HAIR_STYLE == "v2":
+        print("hair v2: %d triangles" % HAIR_TRIS[0])
     build_flowers()
     build_sparkle(body)
     lights()
