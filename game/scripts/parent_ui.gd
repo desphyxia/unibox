@@ -250,7 +250,7 @@ func open_panel() -> void:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_label(box, "Creature (from the next session)", 18)
 	var rk := _row(box)
-	for k in [["fox", "Fox"], ["unicorn", "Unicorn"]]:
+	for k in [["fox", "Fox"], ["unicorn", "Unicorn"], ["collie", "Collie"]]:
 		var b := _button(rk, k[1], func(): _apply_setting("kind", k[0]), Game.kind == k[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_label(box, "Temperament", 18)

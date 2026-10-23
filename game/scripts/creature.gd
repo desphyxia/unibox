@@ -1,6 +1,6 @@
 class_name Creature
 extends Touchable
-## A creature in the meadow, drawn as a live 3D model (creature_view.gd; a fox or a unicorn): an idle loop when sitting, a walk cycle when moving,
+## A creature in the meadow, drawn as a live 3D model (creature_view.gd; a fox, a unicorn or a collie): an idle loop when sitting, a walk cycle when moving,
 ## and one-shot clips for eating, being petted (happy), the hunger cue, lying down to sleep, sleeping, waking and
 ## turning round (half way, sitting or standing, from one side's view to the other's). The clips keep the timings the
 ## rendered frames had, and their events (bites, the sigh) still count in those frames.

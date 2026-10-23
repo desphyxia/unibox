@@ -55,8 +55,8 @@ Press and hold the dots in the top-right corner, answer the grown-ups question, 
 - island-time speed (fast for demos);
 - music on or off;
 - **Bring the second fox now**, instead of waiting about four minutes after the hatch;
-- **Creature: fox or unicorn**, for the next session (the egg hatches that kind, and the second adult and babies are
-  the same kind);
+- **Creature: fox, unicorn or collie**, for the next session (the egg hatches that kind, and the second adult and babies
+  are the same kind). The collie's traits are its dark coat and its white parts (paw buttons in the trait picker);
 - **3D creature check and speed test**, the live creature on its own with every clip, and a speed test (see below);
 - **New session** for the next child: a new egg and a new log.
 

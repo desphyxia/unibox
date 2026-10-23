@@ -1,6 +1,6 @@
 extends Node
 ## Plays through the meadow with simulated touches and saves a screenshot at each step, to check the build.
-## Run (needs a window, not --headless):  godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn]
+## Run (needs a window, not --headless):  godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn|collie]
 
 var main: Node2D
 var out := "user://autoplay"

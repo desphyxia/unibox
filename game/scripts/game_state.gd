@@ -8,7 +8,7 @@ const SAVE_PATH := "user://prototype.cfg"
 const TEMPERAMENTS := ["calm", "playful", "curious"]
 
 var variant := "A"            ## "A": visible needs (cues), "B": no visible needs
-var kind := "fox"             ## the kind of creature that hatches: "fox" or "unicorn" (creatures/<kind>/)
+var kind := "fox"             ## the kind of creature that hatches: "fox", "unicorn" or "collie" (creatures/<kind>/)
 var temperament := "playful"
 var creature_name := ""
 var music := true             ## the background music (the parent area can turn it off)

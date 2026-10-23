@@ -188,6 +188,8 @@ func _draw_root() -> void:
 			_fluff(at, r, col)
 		elif Game.kind == "unicorn":
 			_lock(at, r, col)
+		elif Game.kind == "collie":
+			_paw(at, r, col)
 		else:
 			_flame(at, r, col)
 		if on:          # a little tick badge on the chosen one
@@ -232,6 +234,18 @@ func _lock(at: Vector2, r: float, col: Color) -> void:
 	root.draw_polyline(pts, col, r * 0.42, true)
 	root.draw_circle(pts[pts.size() - 1] + Vector2(0.1, -0.05) * r, r * 0.24, col, true, -1.0, true)
 	root.draw_polyline(pts.slice(2, 14), col.lightened(0.45), r * 0.1, true)
+
+
+func _paw(at: Vector2, r: float, col: Color) -> void:
+	## a paw print in the colour of the collie's white parts, edged so a white one shows on the pale card
+	var edge := Color(INK, 0.35)
+	var pads := [[Vector2(0, 0.22), 0.4], [Vector2(-0.5, -0.22), 0.19], [Vector2(-0.18, -0.5), 0.19],
+		[Vector2(0.18, -0.5), 0.19], [Vector2(0.5, -0.22), 0.19]]
+	for p in pads:
+		root.draw_circle(at + p[0] * r, p[1] * r + 2.5, edge, true, -1.0, true)
+	for p in pads:
+		root.draw_circle(at + p[0] * r, p[1] * r, col, true, -1.0, true)
+	root.draw_circle(at + Vector2(-0.12, 0.12) * r, r * 0.14, col.lightened(0.4), true, -1.0, true)
 
 
 func _flame(at: Vector2, r: float, col: Color) -> void:
