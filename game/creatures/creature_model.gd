@@ -61,15 +61,17 @@ static var _stacks := {}               ## the stacked fur meshes, by source and 
 func _ready() -> void:
 	_player = $AnimationPlayer
 	_skin = $Skeleton3D/Skin
-	_fur = $Skeleton3D/Fur
+	_fur = get_node_or_null("Skeleton3D/Fur")                ## a creature with a smooth coat has none
 	_skin_mat = _material(preload("res://creatures/shaders/skin.gdshader"))
 	_skin.set_surface_override_material(0, _skin_mat)
 	if _skin.mesh.get_surface_count() > 1:          ## the glow round glowing parts, for creatures that have it
 		var halo := _material(preload("res://creatures/shaders/halo.gdshader"))
 		halo.render_priority = 1
 		_skin.set_surface_override_material(1, halo)
-	_fur_source = _fur.mesh
+	_fur_source = _fur.mesh if _fur else null
 	for mi in [_skin, _fur]:
+		if mi == null:
+			continue
 		for s in mi.mesh.get_surface_count():
 			triangles += mi.mesh.surface_get_array_index_len(s) / 3
 	if _noise == null:
@@ -78,8 +80,9 @@ func _ready() -> void:
 	fm.set_shader_parameter("noise", _noise)
 	for k in (get_meta("fur", {}) as Dictionary):            # this creature's own fur look (strand size, shading)
 		fm.set_shader_parameter(k, get_meta("fur")[k])
-	_fur.material_override = fm
-	_fur.mesh = _layered(_fur_source, shells)
+	if _fur:
+		_fur.material_override = fm
+		_fur.mesh = _layered(_fur_source, shells)
 	_player.animation_finished.connect(_on_finished)
 	look = HeadLook.new()
 	look.model = self

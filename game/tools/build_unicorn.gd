@@ -1,6 +1,7 @@
 extends SceneTree
 ## Builds the unicorn the game draws (creatures/unicorn/unicorn.scn) from its Blender export (art/exports/
-## unicorn_live.bin and .json, made by art/generators/unicorn_live_export.py), with tools/creature_builder.gd. Unlike the
+## unicorn2_live.bin and .json, made by art/generators/unicorn2_live_export.py from the new unicorn, unicorn2.py; the
+## first, placeholder unicorn's export, unicorn_live, builds with UNICORN=1), with tools/creature_builder.gd. Unlike the
 ## fox it is one standing model: its skeleton (body, three neck bones, head, ears, three bones down each leg, four along
 ## the tail) and skin weights come from the export, and every clip is written here as bone turns:
 ##   idle (breathing, an ear flick, a swishing tail), walk (a four-beat walk), eat (a nibbling dip of the head), happy (a
@@ -30,7 +31,8 @@ var bone := {}
 
 
 func _initialize() -> void:
-	var base := ProjectSettings.globalize_path("res://").path_join("../art/exports/unicorn_live").simplify_path()
+	var src := "unicorn_live" if OS.get_environment("UNICORN") == "1" else "unicorn2_live"
+	var base := ProjectSettings.globalize_path("res://").path_join("../art/exports/" + src).simplify_path()
 	meta = JSON.parse_string(FileAccess.get_file_as_string(base + ".json"))
 	var blob := FileAccess.get_file_as_bytes(base + ".bin")
 	for b in meta["bones"]:
@@ -75,22 +77,25 @@ func _initialize() -> void:
 				fur_tris.append_array(tri)
 			else:
 				skin_tris.append_array(tri)
-	var skin_mesh := B.make_mesh(table, [skin_tris], [])
-	var fur_mesh := B.make_mesh(table, [fur_tris], [])
+	var meshes := {"Skin": B.make_mesh(table, [skin_tris], [])}
+	if fur_tris.size() > 0:                                    # the new unicorn's coat is smooth: no fur
+		meshes["Fur"] = B.make_mesh(table, [fur_tris], [])
 	print("unicorn: %d vertices, %d bones; skin %d triangles, fur %d triangles" % [table["pos"].size(), bones.size(),
 		skin_tris.size() / 3, fur_tris.size() / 3])
 	var anims := []
 	for c in CLIPS:
 		anims.append(B.bake_fk(c, CLIPS[c][0], FPS, CLIPS[c][1], bones, _frame.bind(c)))
 	var head_at: Vector3 = bones[bone["head"]]["rest"].origin
-	var err := B.save_scene(OUT, "Unicorn", B.make_skeleton(bones), B.make_skin(bones), {"Skin": skin_mesh, "Fur": fur_mesh},
+	var new := meta.has("lie_drop")                            # the new unicorn (its export says how low it lies)
+	var err := B.save_scene(OUT, "Unicorn", B.make_skeleton(bones), B.make_skin(bones), meshes,
 		anims, {"camera": meta["camera"], "ground": meta["ground"], "turn_deg": TURN_DEG, "poses": ["sit", "stand", "down", "sleep"],
 		"pivots": [head_at, head_at, head_at, head_at], "head_forward": _v(meta["head_forward"]), "places": _places(),
 		"look_chain": [["neck_1", 0.2], ["neck_2", 0.3]], "trait_mode": "group", "kind": "unicorn",
-		"shadows": {"sit": [Vector2(16, 240), Vector2(-16, 240)], "stand": [Vector2(16, 240), Vector2(-16, 240)],
-			"sleep": [Vector2(10, 270), Vector2(-10, 270)]},
-		"walk": {"stride": 77.0, "stance": STANCE}, "eat_drop": Vector2(6, 26), "touch": Vector2(190, 250),
-		"fur": {"root_shade": 0.93, "strand_freq": 130.0, "tuft_freq": 16.0}, "blanket": Vector3(90, 310, 110)})
+		"shadows": {"sit": [Vector2(16, 210), Vector2(-16, 210)], "stand": [Vector2(16, 210), Vector2(-16, 210)],
+			"sleep": [Vector2(10, 250), Vector2(-10, 250)]},
+		"walk": {"stride": 77.0, "stance": STANCE}, "eat_drop": Vector2(6, 26), "touch": Vector2(175, 250),
+		"fur": {"root_shade": 0.93, "strand_freq": 130.0, "tuft_freq": 16.0},
+		"blanket": Vector3(70, 250, 95) if new else Vector3(90, 310, 110)})
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
 
@@ -146,7 +151,7 @@ func _add(f: Dictionary, b: String, rot: Basis) -> void:
 
 func _lying(f: Dictionary, k: float, curl: float) -> void:
 	## lying down, k from standing (0) to lying (1); curl: the neck curling round to rest the head (0 to 1)
-	f["move"]["body"] = Vector3(0.05 * k, -1.45 * k, 0.0)
+	f["move"]["body"] = Vector3(0.05 * k, -float(meta.get("lie_drop", 1.45)) * k, 0.0)
 	_add(f, "body", _r(ACROSS, 0.04 * k))
 	for side in ["n", "f"]:
 		_add(f, "leg_%sf_upper" % side, _r(ACROSS, -1.25 * k))        # the forearm back under the chest
@@ -163,7 +168,8 @@ func _lying(f: Dictionary, k: float, curl: float) -> void:
 	_add(f, "ear_0", _r(Vector3.RIGHT, 0.3 * curl))
 	_add(f, "ear_1", _r(Vector3.RIGHT, -0.3 * curl))
 	for t in 4:                          # the tail lifts to lie along the ground, and sweeps round
-		_add(f, "tail_%d" % t, _r(Vector3.UP, -0.3 * curl) * _r(ACROSS, (-0.55 if t == 0 else -0.18) * k))
+		var lift := float(meta.get("tail_lie", 1.0))           # the new unicorn's long tail barely lifts
+		_add(f, "tail_%d" % t, _r(Vector3.UP, -0.3 * curl) * _r(ACROSS, (-0.55 if t == 0 else -0.18) * k * lift))
 
 
 func _frame(tm: float, name: String) -> Dictionary:

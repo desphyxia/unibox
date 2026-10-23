@@ -241,6 +241,11 @@ var _status := ""
 var _result_panel: PanelContainer
 
 
+static func _named(label: String) -> String:
+	## the set-up's name for the kind being tested ("5 unicorns" in a unicorn session)
+	return label.replace("foxes", Game.kind + "s").replace("fox", Game.kind)
+
+
 func speed_test() -> void:
 	if _testing:
 		return
@@ -256,7 +261,7 @@ func speed_test() -> void:
 	results.clear()
 	for i in SPEED_TESTS.size():
 		var t: Array = SPEED_TESTS[i]
-		_status = "Speed test %d of %d: %s" % [i + 1, SPEED_TESTS.size(), t[0]]
+		_status = "Speed test %d of %d: %s" % [i + 1, SPEED_TESTS.size(), _named(t[0])]
 		_setup(t)
 		await get_tree().create_timer(SETTLE).timeout
 		var n := 0
@@ -277,7 +282,7 @@ func speed_test() -> void:
 			code += _code_ms
 			draws += Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
 		var nn := maxi(n, 1)
-		results.append([t[0], n / ((last - t0) / 1.0e6), worst, 100.0 * slow / nn, code / nn, draws / nn])
+		results.append([_named(t[0]), n / ((last - t0) / 1.0e6), worst, 100.0 * slow / nn, code / nn, draws / nn])
 	_setup(["", 1, keep[0], {Viewport.MSAA_DISABLED: 0, Viewport.MSAA_2X: 2, Viewport.MSAA_4X: 4}.get(keep[1], 4), true])
 	fox.play("idle")
 	_testing = false
