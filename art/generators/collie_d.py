@@ -97,8 +97,31 @@ def hdir(v):
     return np.asarray(v) @ HEAD_R.T
 
 
-NOSE = (np.array([0.242, 0.0, -0.03]), np.array([0.029, 0.037, 0.026]))
+NOSE = (np.array([0.238, 0.0, -0.032]), np.array([0.031, 0.037, 0.026]))
 JAW_HINGE = np.array([-0.04, 0.0, -0.088])
+
+
+def nose_body(L):
+    """the nose leather without its nostrils: flat on top, rounded in front, flat below, narrower at the bottom"""
+    c, r = NOSE
+    q = L - c
+    sy = 1.0 + 0.2 * np.clip(-q[:, 2] / r[2], 0, 1)               # narrower toward the bottom
+    d = ellipsoid(np.stack([q[:, 0], q[:, 1] * sy, q[:, 2]], 1), np.zeros(3), r) * 0.9
+    d = smax(d, q[:, 2] - (0.7 * r[2] + 0.06 * q[:, 0]), 0.016)            # the flat top, a touch raised at the front
+    d = smax(d, -(q[:, 2] + 0.66 * r[2]), 0.006)                             # the flat underside
+    return d
+
+
+def nose_sdf(L):
+    c, r = NOSE
+    d = nose_body(L)
+    # the groove down the front, from between the nostrils to the lip
+    d = smax(d, -round_cone(L, c + np.array([0.026, 0.0, -0.002]), c + np.array([0.03, 0.0, -0.03]), 0.0012, 0.0032), 0.002)
+    for s in (1, -1):                                         # nostrils: a round opening with a slit running out and back
+        d = smax(d, -ellipsoid(L, c + np.array([0.027, 0.0145 * s, -0.004]), (0.0065, 0.0048, 0.0036)), 0.002)
+        d = smax(d, -round_cone(L, c + np.array([0.026, 0.019 * s, -0.007]), c + np.array([0.016, 0.029 * s, -0.014]),
+                                0.0024, 0.0008), 0.0015)
+    return d
 JAW_OPEN = rot((0, 1, 0), 12.0)                              # the jaw dropped open in a smile
 
 
@@ -113,7 +136,7 @@ def upper(L):
     d = smin(d, squash(round_cone, L, 0.95, (0.06, 0.0, -0.03), (0.218, 0.0, -0.054), 0.07, 0.037), 0.05)   # muzzle
     for s in (1, -1):                                         # upper lips, hanging over the jaw, rising at the back
         d = smin(d, round_cone(L, np.array([0.0, 0.056 * s, -0.05]), np.array([0.183, 0.033 * s, -0.072]), 0.022, 0.03), 0.03)
-    d = smin(d, ellipsoid(L, NOSE[0], NOSE[1]), 0.015)
+    d = smin(d, nose_body(L) + 0.002, 0.012)                 # the pad under the nose leather
     return d
 
 
@@ -167,8 +190,6 @@ def head_sdf(L):
         q = L - E
         sock = np.maximum(almond(q @ u, q @ v), np.maximum(q @ n - 0.03, -(q @ n) - 0.03))
         d = smax(d, -sock, 0.006)
-    for s in (1, -1):                                         # nostrils
-        d = smax(d, -ellipsoid(L, NOSE[0] + np.array([0.03, 0.017 * s, -0.004]), (0.01, 0.008, 0.007)), 0.004)
     return d
 
 
@@ -283,24 +304,31 @@ def head_colours(L, N):
     x, y, z = L[:, 0], L[:, 1], L[:, 2]
     n = len(L)
     c = np.tile(BLACK_SKIN, (n, 1))
-    # the blaze: narrow up over the forehead and crown, widening over the stop onto the muzzle
-    half = 0.011 + 0.004 * smooth(-0.05, 0.1, x) + 0.058 * smooth(0.13, 0.205, x) ** 1.2
-    yc = 0.006 * np.sin(x * 25.0)
-    blaze = smooth(half + 0.006, half - 0.004, np.abs(y - yc)) * smooth(-0.09, -0.04, x) * smooth(-0.02, 0.03, z + 0.1 * (x - 0.1))
-    # the muzzle: white on the top and sides from below the eyes forward, and round the mouth
-    edge = 0.142 - 2.0 * np.clip(-0.035 - z, 0, None)                                     # its back edge slants down and back to the mouth corner
-    muz = smooth(edge - 0.004, edge + 0.014, x) * smooth(0.03, 0.008, z)
+    # the blaze: narrow up over the forehead and crown, swinging to the far side between the eyes (as in the painting),
+    # then widening over the muzzle; on the near side it widens later, so the black of the near eye reaches the bridge
+    near = y >= 0
     du, dl, inside, Q = lip_lines(L)
+    yc = 0.006 * np.sin(x * 25.0) - 0.011 * smooth(0.02, 0.12, x)
+    grow = np.where(near, 0.062 * smooth(0.15, 0.225, x) ** 1.3, 0.058 * smooth(0.13, 0.205, x) ** 1.2)
+    half = 0.0105 + 0.003 * smooth(-0.05, 0.1, x) + grow
+    blaze = smooth(half + 0.006, half - 0.004, np.abs(y - yc)) * smooth(-0.09, -0.04, x) * smooth(-0.02, 0.03, z + 0.1 * (x - 0.1))
+    # the muzzle: white on the top and sides from below the eyes forward, and round the mouth. Its back edge slants down
+    # and back to the mouth corner; on the near side it starts well in front of the eye, so the cheek under the eye and
+    # the side of the muzzle behind it are black down to the lip
+    edge_far = 0.142 - 2.0 * np.clip(-0.035 - z, 0, None)
+    edge_near = 0.172 + 0.8 * np.clip(z + 0.035, 0, None) - 1.5 * np.clip(-0.035 - z, 0, None)
+    edge = np.where(near, edge_near, edge_far)
+    muz = smooth(edge - 0.004, edge + 0.014, x) * smooth(0.03, 0.008, z)
     lowj = smooth(-0.09, -0.11, Q[:, 2]) * smooth(-0.02, 0.04, Q[:, 0])          # the chin and lower jaw
-    w = np.clip(np.maximum(np.maximum(blaze, muz), lowj), 0, 1)
+    lipband = near * smooth(0.034, 0.024, du) * smooth(0.06, 0.1, x)             # a thin white edge along the near upper lip
+    w = np.clip(np.maximum(np.maximum(np.maximum(blaze, muz), lowj), lipband), 0, 1)
     c = mix(c, WHITE, w)
     # leather and lips
     lips_u = smooth(0.02, 0.012, du) * smooth(-0.01, 0.02, x)
     lips_l = smooth(0.014, 0.008, dl) * smooth(-0.01, 0.02, Q[:, 0])
     c = mix(c, hexc("#141114"), np.maximum(lips_u, lips_l))
     c = np.where(inside[:, None], hexc("#4a1c22"), c)
-    nd = np.linalg.norm((L - NOSE[0]) / NOSE[1], axis=1)
-    c = mix(c, hexc("#141215"), smooth(1.25, 1.0, nd))
+    c = mix(c, hexc("#141215"), smooth(0.002, 0.0, nose_body(L)))
     return c, w
 
 
@@ -681,21 +709,19 @@ def build_eyes():
 
 def build_nose():
     c, r = NOSE
-    S, F = sphere_mesh(96, 48)
-    q = S.copy()
-    q[:, 1] *= 1.0 - 0.22 * np.clip(-S[:, 2], 0, 1)          # narrower below
-    q[:, 2] -= 0.25 * np.exp(-(S[:, 1] / 0.25) ** 2) * np.clip(-S[:, 2], 0, 1)   # the groove down the middle
-    V = c + q * r * np.array([1.04, 1.03, 1.05])
+    h = 0.0005
+    F, o = sample(nose_sdf, c - r * 1.3, c + r * 1.3, h)
+    V, T = surface_nets(F, o, h)
+    V = project(nose_sdf, V, 2)
+    N = grad(nose_sdf, V)
+    q = (V - c) / r
     col = np.tile(hexc("#121014"), (len(V), 1))
-    for s in (1, -1):                                         # nostrils: dark commas on the front
-        dd = np.linalg.norm((V - (c + np.array([0.028, 0.019 * s, -0.004]))) / np.array([0.01, 0.009, 0.007]), axis=1)
-        col = mix(col, hexc("#020102"), smooth(1.5, 0.9, dd)[:, None])
-        V += (np.array([-0.005, 0, 0]) * smooth(1.5, 0.6, dd)[:, None])
-    col = mix(col, hexc("#3c343c"), (smooth(0.0, 0.6, S[:, 2]) * 0.6)[:, None])
-    # a pebbled leather: tiny bumps in the normals' place, as colour variation
-    rng = np.random.default_rng(5)
+    inside = nose_body(V) < -0.0015                            # in the nostrils: darker
+    col = np.where(inside[:, None], hexc("#030203"), col)
+    col = mix(col, hexc("#3a333a"), (smooth(0.1, 0.8, q[:, 2]) * 0.55)[:, None])   # the top a little lighter
+    rng = np.random.default_rng(5)                            # a pebbled leather, as colour variation
     col *= (0.85 + 0.3 * rng.random(len(V)))[:, None]
-    mesh("nose", to_world(V), F, col * 0.4, principled("nose", rough=0.45, spec=0.3, coat=0.12))
+    mesh("nose", to_world(V), T, col * 0.4, principled("nose", rough=0.45, spec=0.3, coat=0.12), hdir(N))
 
 
 def build_mouth():
@@ -767,7 +793,7 @@ def build_skin(h):
     if HEAD_ONLY:
         lo, hi = HEAD_C - 0.36, HEAD_C + 0.36
     else:
-        lo, hi = np.array([-0.95, -0.36, -0.01]), np.array([1.0, 0.36, 1.5])
+        lo, hi = np.array([-0.95, -0.36, -0.01]), np.array([1.12, 0.36, 1.56])   # room for the nose tip and the crown
     F, o = sample(skin_sdf, lo, hi, h)
     V, T = surface_nets(F, o, h)
     V = project(skin_sdf, V, 2)
@@ -1013,7 +1039,7 @@ def lip_mask(L):
 
 def head_fur(coat, R, N, field, rng):
     L = to_head(R)
-    keep = np.linalg.norm((L - NOSE[0]) / NOSE[1], axis=1) > 1.15
+    keep = nose_body(L) > 0.0025
     for s in (1, -1):
         E, n, u, v = EYES[s]
         q = L - E
@@ -1468,6 +1494,7 @@ VIEWS_AT = {   # azimuth from +y toward +x, elevation, focus, distance, focal le
     "hero": (58.0, 6.0, (0.17, 0.0, 0.72), 4.7, 70.0),
     "flank": (15.0, 12.0, (-0.1, 0.0, 0.72), 1.9, 70.0),
     "ear": (60.0, 8.0, "ear", 0.75, 85.0),
+    "nose": (58.0, 6.0, "nose", 0.8, 85.0),
     "dside": (0.0, 4.0, (0.02, 0.0, 0.66), 4.6, 70.0),
     "dfront": (90.0, 6.0, (0.1, 0.0, 0.66), 4.6, 70.0),
     "dback": (215.0, 12.0, (0.0, 0.0, 0.62), 4.6, 70.0),
@@ -1484,6 +1511,7 @@ def cam_pos(view):
 def camera(view):
     az, el, focus, dist, lens = VIEWS_AT[view]
     named = {"hface": lambda: to_world(np.array([0.0, 0.0, 0.06])), "ear": lambda: to_world(ear_sheet(1)[0][20, 14]),
+             "nose": lambda: to_world(NOSE[0] + np.array([-0.06, 0.02, -0.03])),
              None: lambda: to_world(np.array([0.06, 0.0, -0.01]))}
     focus = Vector(named[focus]() if focus is None or isinstance(focus, str) else focus)
     cam = bpy.data.cameras.new("cam")
