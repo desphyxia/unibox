@@ -51,12 +51,12 @@ const UNICORN_MANES := {
 ## collie: the dark coat (new hue, added saturation, brightness factor: the black brightens into the colour) and the white
 const COLLIE_COATS := {
 	"black": [-1.0, 0.0, 1.0],
-	"chocolate": [22.0, 0.45, 2.6],
-	"red": [18.0, 0.55, 3.6],
-	"blue": [215.0, 0.12, 3.0],
-	"lilac": [285.0, 0.12, 3.4],
-	"gold": [38.0, 0.55, 4.2],
-	"berry": [330.0, 0.4, 3.0],
+	"chocolate": [22.0, 0.45, 1.45],
+	"red": [18.0, 0.55, 2.0],
+	"blue": [215.0, 0.1, 1.6],
+	"lilac": [285.0, 0.12, 1.8],
+	"gold": [38.0, 0.55, 2.3],
+	"berry": [330.0, 0.4, 1.6],
 }
 const COLLIE_WHITES := {
 	"snow": [-1.0, 0.0, 1.0],
@@ -66,7 +66,7 @@ const COLLIE_WHITES := {
 	"mint": [150.0, 0.18, 1.0],
 	"sky": [205.0, 0.2, 1.0],
 }
-const COLLIE_BASE_COAT := Color("2c3242")     ## the collie's own blue-black and white, for the picker's buttons
+const COLLIE_BASE_COAT := Color("2b3449")     ## the collie's own blue-black and white, for the picker's buttons
 const COLLIE_BASE_WHITE := Color("eeeae1")
 const UNICORN_BASE_COAT := Color("e6f2f8")     ## the unicorn's own pearly coat and candy mane, for the picker's buttons
 const UNICORN_BASE_MANE := Color("f6b3cf")
