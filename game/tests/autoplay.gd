@@ -26,6 +26,10 @@ func _ready() -> void:
 	await tap(w(KindChooser.SPOTS[KindChooser.KINDS.find(kind)]))
 	await wait(0.6)
 	await shot("chosen")
+	main.ui.open_book(0)                   # the storybook before the story begins
+	await wait(0.3)
+	await shot("book-empty")
+	main.ui._close()
 	await wait(2.4)
 	await shot("egg")
 	for i in 4:
@@ -299,6 +303,46 @@ func _ready() -> void:
 	print("GROWN ", baby.stage(), " scale %.3f of %.3f, voice %.2f, fur %d" % [baby.base_scale, main.CREATURE_SCALE, baby.voice, baby.look.model.shells])
 	await shot("baby-grown")
 	await wait(1.5)                                  # its storybook picture is taken first
+	# the storybook: every page, and the warning before a new session clears it
+	main.ui.open_panel()
+	await wait(0.3)
+	await shot("parent-area-book")
+	for k in main.ui.book_pages():
+		main.ui.open_book(k)
+		await wait(0.3)
+		await shot("book-%02d" % k)
+	# a swipe to the left on the picture turns to the next page, to the right back again
+	main.ui.open_book(2)
+	await wait(0.3)
+	var mid: Vector2 = main.ui.book_photo.get_global_rect().get_center()
+	await press(mid)
+	for k in 6:
+		await drag(mid + Vector2(-30.0 * (k + 1), 0))
+	await release(mid + Vector2(-180, 0))
+	await wait(0.3)
+	var after_left: int = main.ui.book_at
+	mid = main.ui.book_photo.get_global_rect().get_center()
+	await press(mid)
+	for k in 6:
+		await drag(mid + Vector2(30.0 * (k + 1), 0))
+	await release(mid + Vector2(180, 0))
+	await wait(0.3)
+	print("SWIPE from page 2: left to %d, then right to %d" % [after_left, main.ui.book_at])
+	main.ui._confirm_new_session()
+	await wait(0.3)
+	await shot("new-session-warning")
+	main.ui._close()
+	var words := StoryText.new(main.story)
+	for pass_names in 2:
+		print("BOOK ", words.cover_title(), " | ", words.cover_line())
+		for k in main.story.pages.size():
+			print("BOOK %s: %s" % [main.story.pages[k]["key"], words.page_text(k)])
+		print("BOOK end: ", words.closing_text())
+		if pass_names == 0:                  # again without names
+			Game.creature_name = ""
+			for o in main.creatures:
+				o.pet_name = ""
+	Game.creature_name = "Pip"
 	# the comparison: rendered fox and live 3D fox
 	main.open_compare()
 	await wait(1.5)

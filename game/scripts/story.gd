@@ -19,6 +19,8 @@ const TRIES := 24
 var main: Node2D
 var pages: Array[Dictionary] = []     ## in order: key, who, facts, hour, seconds, jpg (empty until taken)
 var tally := {}                        ## how often: pets, apples, drinks, balls, things worn, things placed
+var day := 1                           ## island days so far (a new one each time the hour wraps round midnight)
+var _last_hour := -1.0
 var grab_ms: Array[float] = []         ## main-thread time of each picture (the speed check)
 var _queue: Array[Dictionary] = []    ## pictures waiting: page, who, at, size, due, tries
 var _cam: SubViewport
@@ -68,7 +70,7 @@ func moment(key: String, who: Creature = null, facts := {}, delay := 1.0, at = n
 	if has(key) or pages.size() >= MAX_PAGES or main == null:
 		return
 	var p := {"key": key, "who": who.who if who else "", "facts": facts.duplicate(), "hour": main.time.hour,
-		"seconds": Log.seconds(), "jpg": PackedByteArray()}
+		"day": day, "seconds": Log.seconds(), "jpg": PackedByteArray()}
 	pages.append(p)
 	Log.event("story_page", key)
 	_take(p, who, at, size, delay)
@@ -117,7 +119,15 @@ func _take(p: Dictionary, who: Creature, at, size: Vector2, delay: float) -> voi
 	_queue.append({"page": p, "who": who, "at": at, "size": size, "due": Log.seconds() + delay, "tries": 0})
 
 
+func babies() -> int:
+	return main.breeding.babies if main and main.breeding else 0
+
+
 func _process(_delta: float) -> void:
+	if main and main.time:
+		if main.time.hour < _last_hour - 1.0:
+			day += 1
+		_last_hour = main.time.hour
 	if _shooting or _queue.is_empty():
 		return
 	var now := Log.seconds()
