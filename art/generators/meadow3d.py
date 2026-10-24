@@ -14,12 +14,13 @@ pads, bulrushes, stones), tree.png, nest_back.png, nest_front.png, egg.png, lant
 basket_east.png. The props cast their shadows into the backdrop but are drawn separately (the game
 sorts them with the creatures). The things that move (apple.png and the things to wear in the basket, wear_crown.png,
 wear_scarf.png, wear_bow.png, ball.png) are made where they first sit, centred on their own point, without shadows,
-and with no grass round them; the things to place that stand on the grass (plant.png, lantern2.png) carry their own
+and with no grass round them (and so are the signposts' pictures, icon_water.png and icon_tree.png, which bob on
+the boards); the things to place that stand on the grass (plant.png, lantern2.png) carry their own
 soft shadow (the ground catches it, and nothing else of the meadow shows). lantern_lit.png and lantern2_lit.png are the
 lanterns with their lamps lit, for the night.
 
 Run:  blender -b --factory-startup -P meadow3d.py -- OUT_DIR [--quick] [part ...]
-      parts: backdrop tree nest egg lantern sign basket wear apple plant ball (default: all)      --quick  fewer grass blades, half size"""
+      parts: backdrop tree nest egg lantern sign basket wear apple plant ball icon (default: all)      --quick  fewer grass blades, half size"""
 import os, sys, math, json, time
 import bpy
 import numpy as np
@@ -28,7 +29,7 @@ from mathutils import Vector
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = os.path.abspath(argv[0] if argv else "meadow3d_out")
 QUICK = "--quick" in argv
-PARTS = [a for a in argv[1:] if not a.startswith("--")] or ["backdrop", "tree", "nest", "egg", "lantern", "sign", "basket", "wear", "apple", "plant", "ball"]
+PARTS = [a for a in argv[1:] if not a.startswith("--")] or ["backdrop", "tree", "nest", "egg", "lantern", "sign", "basket", "wear", "apple", "plant", "ball", "icon"]
 sys.argv = [sys.argv[0], "--", "unused", "--quick"]          # collie_d.py (shared helpers) reads its options from here
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import collie_d as D
@@ -735,6 +736,57 @@ def build_apple():
     return ["apple", "applestem"], project(c)[0][0]
 
 
+ICON_AT = {"icon_water": (1150, 690), "icon_tree": (1220, 690)}   # where the signposts' pictures are made (free ground)
+
+
+def _icon_frame(name):
+    """the centre and size of a signpost picture: the 48 x 48 canvas of its drawing (icon_*.svg), one world pixel a unit,
+    standing clear of the grass"""
+    g = at_px(*ICON_AT[name])
+    u = 1.0 / project(g)[1][0]
+    return g + np.array([0, 0, 26 * u]), u
+
+
+def build_icon_water():
+    """the pond's signpost picture: a plump drop of water, pale at the top left, bluer below, with a soft highlight"""
+    c, u = _icon_frame("icon_water")
+    Sv, Sf = D.sphere_mesh(48, 32)
+    z = Sv[:, 2]
+    f = np.where(z > 0, (1 - z) ** 0.75 * (1 + 0.9 * z), 1.0)   # the top drawn up into a point
+    V = np.stack([Sv[:, 0] * f, Sv[:, 1] * f * 0.8, np.where(z > 0, z * 1.55, z)], 1) * 16 * u
+    V += c + np.array([0, 0, -7 * u])                          # (the round part low, as in the drawing: y 4 to 46)
+    light = smooth(-0.4, 0.9, unit(Sv) @ unit(np.array([-0.6, -0.6, 0.5])))
+    col = mix(np.tile(hexc("#5f9fca"), (len(V), 1)), hexc("#b4daf0"), light[:, None] * 0.75)
+    D.mesh("icon_water", V, Sf, col, D.principled("dropm", rough=0.12, spec=0.6, coat=0.6))
+    return ["icon_water"]
+
+
+def build_icon_tree():
+    """the meadow's signpost picture: a little round apple tree, a soft green crown on a warm trunk, three pink apples"""
+    c, u = _icon_frame("icon_tree")
+    at = lambda x, y, d=0.0: c + np.array([(x - 24) * u, d * u, (24 - y) * u])
+    B = D.Batch()
+    Vt, Ft = Ub.tube(np.array([at(24, 44), at(24, 30)]), np.array([3.4, 3.0]) * u, 12)
+    B.add(Vt, Ft, hexc("#b98d74"))
+    B.build("icon_trunk", D.principled("trunkm", rough=0.7, spec=0.2))
+    Sv, Sf = D.sphere_mesh(48, 24)
+    n = unit(Sv)
+    bump = 1 + 0.05 * np.sin(5 * np.arctan2(n[:, 1], n[:, 0]) + 3 * n[:, 2]) * np.sqrt(1 - n[:, 2] ** 2)
+    V = Sv * bump[:, None] * np.array([16, 12, 15.5]) * u + at(24, 20)
+    light = smooth(-0.4, 0.9, n @ unit(np.array([-0.6, -0.6, 0.55])))
+    col = mix(np.tile(hexc("#72bb72"), (len(V), 1)), hexc("#b2dea0"), light[:, None] * 0.85)
+    D.mesh("icon_crown", V, Sf, col, D.principled("crownm", rough=0.55, spec=0.3, sheen=0.4))
+    A = D.Batch()
+    Va, Fa = D.sphere_mesh(20, 10)
+    for x, y in ((16, 18), (30, 14), (28, 26)):              # set into the front of the crown
+        dx, dz = (x - 24) / 16, (24 - 4 - y) / 15.5
+        d = -12 * math.sqrt(max(0.0, 1 - dx * dx - dz * dz)) + 1.0
+        A.add(Va * 4.2 * u + at(x, y, d), Fa, mix(np.tile(hexc("#ff7a8c"), (len(Va), 1)), hexc("#ffb3bf"),
+                                                     smooth(0.2, 1.0, Va @ unit(np.array([-0.6, -0.6, 0.5])))[:, None] * 0.6))
+    A.build("icon_apples", D.principled("iconapplem", rough=0.3, spec=0.5, coat=0.4))
+    return ["icon_trunk", "icon_crown", "icon_apples"]
+
+
 # ================================================================== light, sky, render
 def light_and_sky():
     sc = bpy.context.scene
@@ -876,13 +928,15 @@ def main():
     props["plant"] = build_plant()
     props["ball"] = build_ball()
     props["lantern2"] = build_lanterns((LOOSE_AT["lantern2"],), 2)[0]
-    for n in ["basket", "basket_east", "apple", "applestem", "plant", "ball", "lantern2"] + ["wear_" + i for i in wear]:
+    props["icon_water"], props["icon_tree"] = build_icon_water(), build_icon_tree()
+    for n in ["basket", "basket_east", "apple", "applestem", "plant", "ball", "lantern2", "icon_water", "icon_crown",
+              "icon_trunk", "icon_apples"] + ["wear_" + i for i in wear]:
         outward(n)
     props = {k: [n for n in v if n in bpy.data.objects] for k, v in props.items()}   # (a bouquet makes only the parts it has)
     grounded = ("plant", "lantern2")                          # loose things that stand on the grass: their own shadow
     loose_free = ("ball",)                                     # (the ball rolls and spins: the game gives it a shadow)
     loose = {"nest_back", "nest_front", "egg", "apple", "applestem"} | {"wear_" + i for i in wear} | \
-            {n for k in grounded + loose_free for n in props[k]}
+            {n for k in grounded + loose_free + ("icon_water", "icon_tree") for n in props[k]}
     prop_names = {n for v in props.values() for n in v} | {n for l in lan for n in l}
     for ob in bpy.data.objects:                               # props are drawn separately; their shadows stay
         if ob.name in prop_names:
@@ -902,6 +956,9 @@ def main():
              "apple": (apple_px[0], apple_px[1], 96, 96, 48, 48),
              "plant": (*LOOSE_AT["plant"], 100, 120, 50, 116), "ball": (*LOOSE_AT["ball"], 64, 64, 32, 60),
              "lantern2": (*LOOSE_AT["lantern2"], 80, 140, 40, 136)}
+    for k in ("icon_water", "icon_tree"):                     # the signposts' pictures: 48 x 48, centred
+        c, _ = _icon_frame(k)
+        boxes[k] = (*project(c[None])[0][0], 48, 48, 24, 24)
     for id_, (x, y) in wear.items():                          # each 64 x 64, centred on its spot
         boxes["wear_" + id_] = (x, y, 64, 64, 32, 32)
     show = dict(props, lantern=lan[0])
@@ -912,7 +969,7 @@ def main():
         if not (part in PARTS or name in PARTS or name.rstrip("2") in PARTS):
             continue
         hide = set()
-        if name in ("basket", "basket_east", "apple", "ball") or name.startswith("wear_"):   # loose things: no grass round them
+        if name in ("basket", "basket_east", "apple", "ball") or name.startswith(("wear_", "icon_")):   # loose things: no grass round them
             hide = {n for n in meshes if bpy.data.objects[n].type == "CURVES" or n.startswith(("flowers", "flowerdots", "pebbles"))}
         if name.startswith("wear_"):                           # (and nothing of the basket in their way)
             hide |= {"basket"} | {"wear_" + i for i in wear if "wear_" + i != name}

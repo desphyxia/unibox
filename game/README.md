@@ -135,7 +135,9 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   own soft shadow, and the ball gets one from the game (it spins). The game draws the ripples and glints on the water.
   At dusk the lanterns fade over to pictures of them lit (`lantern_lit.png`, `lantern2_lit.png`, paper shades glowing
   amber), which the night's tint is kept off, so they shine in the dark.
-  The sign pictures (a drop, the tree) are still small drawings (`art/generators/meadow.py`).
+  The signposts' pictures (a drop of water, a little apple tree; `icon_water.png`, `icon_tree.png`) are rendered the
+  same way, without shadows, as they bob on the boards. Only the heart, sparkle and paw are still drawings
+  (`art/generators/meadow.py`).
 - The sounds are synthesised (`art/generators/sfx.py`).
 - The music is made from code (`art/generators/music.py`): a day tune (76 beats a minute: a warm pad, a soft bass and a
   music-box melody over Fmaj7, Dm7, Bbmaj7, Csus4, Fmaj7, Am7, Bbmaj7, C7) and a slower, lower night lullaby on the

@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bwvoud7ppooo2"
-path="res://.godot/imported/icon_water.svg-c7e8246b67bdbf64e4bd3c3fdb0a8eca.ctex"
+uid="uid://c3jhiq4gnysut"
+path="res://.godot/imported/icon_tree.png-a9bd045a1480d50e6b3db30c5bdcd0c4.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/meadow/icon_water.svg"
-dest_files=["res://.godot/imported/icon_water.svg-c7e8246b67bdbf64e4bd3c3fdb0a8eca.ctex"]
+source_file="res://art/meadow3d/icon_tree.png"
+dest_files=["res://.godot/imported/icon_tree.png-a9bd045a1480d50e6b3db30c5bdcd0c4.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=2.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false
