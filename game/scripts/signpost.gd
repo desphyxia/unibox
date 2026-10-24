@@ -19,7 +19,7 @@ func _init(p_to: String, at: Vector2) -> void:
 func _ready() -> void:
 	touch_priority = 25
 	var left := to == "meadow"
-	_sprite.texture = load("res://art/meadow/sign.svg")
+	_sprite.texture = load("res://art/meadow3d/sign.png")
 	_sprite.centered = false
 	_sprite.scale = Vector2(-0.5 if left else 0.5, 0.5)
 	_sprite.offset = -Vector2(40, 146) * 2.0

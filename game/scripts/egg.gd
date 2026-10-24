@@ -26,7 +26,7 @@ func _ready() -> void:
 	glow.texture = Fx.glow_texture(Color(1.0, 0.93, 0.7, 0.85), 256)
 	glow.position = Vector2(0, -72)
 	add_child(glow)
-	sprite.texture = load("res://art/meadow/egg.svg")
+	sprite.texture = load("res://art/meadow3d/egg.png")
 	sprite.centered = false
 	sprite.scale = Vector2.ONE * 0.5
 	sprite.offset = Vector2(-120, -292)     # texture is drawn at 2x: bottom centre is the origin
