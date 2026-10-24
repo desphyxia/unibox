@@ -21,7 +21,7 @@ var items := {}                          ## id -> WearItem
 func _ready() -> void:
 	position = AT
 	z_index = 0
-	add_child(basket_sprite())
+	add_child(basket_sprite("basket"))
 	for id in ITEMS:
 		var it := WearItem.new()
 		it.id = id
@@ -31,10 +31,11 @@ func _ready() -> void:
 		it.home()
 
 
-static func basket_sprite() -> Sprite2D:
-	## the woven basket with a handle, rendered in 3D (art/generators/meadow3d.py); its origin is the basket's place
+static func basket_sprite(art: String) -> Sprite2D:
+	## the woven basket with a handle, rendered in 3D where it stands (art/generators/meadow3d.py); its origin is the
+	## basket's place
 	var s := Sprite2D.new()
-	s.texture = load("res://art/meadow3d/basket.png")
+	s.texture = load("res://art/meadow3d/%s.png" % art)
 	s.centered = false
 	s.scale = Vector2.ONE * 0.5
 	s.offset = Vector2(-160, -192)               # texture at 2x

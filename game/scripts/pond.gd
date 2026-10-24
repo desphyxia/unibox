@@ -7,9 +7,8 @@ extends Node2D
 signal tapped(p: Vector2)
 
 const CENTRE := Vector2(1620, 596)       ## the middle of the water, world coordinates
-const RX := 272.0                        ## the water's half width and half depth (pond.svg's inner oval)
+const RX := 272.0                        ## the water's half width and half depth, on screen
 const RY := 72.0
-const SVG_CENTRE := Vector2(300, 92)     ## that middle in pond.svg
 
 var _ripples := []                       ## [position, age, size]
 var _shimmer := 0.0
@@ -17,14 +16,7 @@ var _t := 0.0
 
 
 func _ready() -> void:
-	position = CENTRE
-	var s := Sprite2D.new()
-	s.texture = load("res://art/meadow/pond.svg")
-	s.centered = false
-	s.scale = Vector2.ONE * 0.5                # drawn at 2x for sharp Retina screens
-	s.offset = -SVG_CENTRE * 2.0
-	s.show_behind_parent = true
-	add_child(s)
+	position = CENTRE                          # (the water itself is in the backdrop, meadow_east.png)
 
 
 static func contains(p: Vector2, margin := 0.0) -> bool:

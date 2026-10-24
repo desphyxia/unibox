@@ -9,14 +9,16 @@ the back of the walkable ground (Creature.GROUND, scale 1.12 to 0.86) is what pe
 coordinates are the game's meadow pixels (1x; the pictures are made at 2x for Retina screens).
 
 Each picture keeps the canvas and origin of the drawing it replaces (game/art/meadow/*.svg), so the game only loads a
-different file:  meadow.png (x -512..1536, y -128..896), tree.png, nest_back.png, nest_front.png, egg.png,
-lantern.png, sign.png, basket.png. The props cast their shadows into the backdrop but are drawn separately (the game
+different file:  meadow.png (x -512..1536, y -128..896), meadow_east.png (x 1536..3072, with the pond: water, lily
+pads, bulrushes, stones), tree.png, nest_back.png, nest_front.png, egg.png, lantern.png, sign.png, basket.png,
+basket_east.png. The props cast their shadows into the backdrop but are drawn separately (the game
 sorts them with the creatures). The things that move (apple.png and the things to wear in the basket, wear_crown.png,
-wear_scarf.png, wear_bow.png) are made where they first sit, centred on their own point, without shadows, and with no
-grass round them.
+wear_scarf.png, wear_bow.png, ball.png) are made where they first sit, centred on their own point, without shadows,
+and with no grass round them; the things to place that stand on the grass (plant.png, lantern2.png) carry their own
+soft shadow (the ground catches it, and nothing else of the meadow shows).
 
 Run:  blender -b --factory-startup -P meadow3d.py -- OUT_DIR [--quick] [part ...]
-      parts: backdrop tree nest egg lantern sign basket wear apple (default: all)      --quick  fewer grass blades, half size"""
+      parts: backdrop tree nest egg lantern sign basket wear apple plant ball (default: all)      --quick  fewer grass blades, half size"""
 import os, sys, math, json, time
 import bpy
 import numpy as np
@@ -25,7 +27,7 @@ from mathutils import Vector
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = os.path.abspath(argv[0] if argv else "meadow3d_out")
 QUICK = "--quick" in argv
-PARTS = [a for a in argv[1:] if not a.startswith("--")] or ["backdrop", "tree", "nest", "egg", "lantern", "sign", "basket", "wear", "apple"]
+PARTS = [a for a in argv[1:] if not a.startswith("--")] or ["backdrop", "tree", "nest", "egg", "lantern", "sign", "basket", "wear", "apple", "plant", "ball"]
 sys.argv = [sys.argv[0], "--", "unused", "--quick"]          # collie_d.py (shared helpers) reads its options from here
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import collie_d as D
@@ -96,6 +98,16 @@ def noise(x, y, scale, seed, octaves=3):
     return out / 3.5
 
 
+POND_C, POND_R = (1620.0, 596.0), (272.0, 72.0)                 # the water's oval on screen (Pond.CENTRE, RX, RY)
+WATER = -0.22                                                 # the water's level
+
+
+def pond_r(x, g):
+    """how far out of the pond's oval a ground point is (1 on the water's edge), measured on screen"""
+    q, _ = project(np.stack([np.asarray(x, float).ravel(), np.asarray(g, float).ravel(), np.zeros(np.size(x))], 1))
+    return np.hypot((q[:, 0] - POND_C[0]) / POND_R[0], (q[:, 1] - POND_C[1]) / POND_R[1]).reshape(np.shape(x))
+
+
 def height(x, g):
     """the meadow: nearly flat where creatures walk, a soft rise toward the back, green hills along the far edge, then
     falling away (so the sky and the far hills show above it, as in the painted meadow)"""
@@ -104,8 +116,10 @@ def height(x, g):
     # so the hills are low, and just behind them the land drops out of sight)
     h = 0.2 * noise(x, g, 30.0, 1)
     hills = 1.3 + 0.9 * noise(x, g * 0.3, 60.0, 2, 2) + 0.5 * np.sin(x * 0.05 + 1.0)
-    h += np.clip(hills, 0.4, None) * smooth(152.0, 164.0, g)
+    h += np.clip(hills, 0.4, None) * smooth(152.0, 164.0, g) * (1.0 - 0.7 * smooth(0.0, 14.0, x))   # lower by the pond
     h -= 0.06 * np.clip(g - G_EDGE, 0, None) ** 2
+    w = smooth(1.12, 0.85, pond_r(x, g))                         # the pond's bowl, its banks sloping gently in
+    h = h + (WATER - 0.12 - h) * w
     return h
 
 
@@ -154,6 +168,9 @@ def build_land():
     d, half = path_dist(V)
     sand = smooth(half + 0.6, half - 0.5, d)
     col = mix(col, hexc("#f2dfc2"), sand[:, None])
+    pr = pond_r(x, g)
+    col = mix(col, hexc("#e2d0ae"), smooth(1.2, 1.04, pr)[:, None] * 0.9)     # a soft sandy shore round the water
+    col = mix(col, hexc("#c9b89c"), smooth(1.0, 0.9, pr)[:, None])
     D.mesh("land", V, Fc, col, D.principled("land", rough=0.95, spec=0.15))
     log("land", len(V), "points, %.1fs" % (time.time() - t0))
     return V
@@ -163,8 +180,8 @@ def build_far_hills():
     """hazy lilac and blue hills far off, their tops where the painted ones were (about y 330 to 400)"""
     B = D.Batch()
     for k, (cx, w, top_y, colr) in enumerate(((-700, 900, 372, "#c9bdee"), (-80, 1000, 356, "#b9d4ee"),
-                                              (700, 1100, 344, "#cbbff0"), (1500, 1000, 360, "#b7d7ea"),
-                                              (2300, 1000, 350, "#c9bdee"), (3000, 900, 368, "#b9d4ee"))):
+                                              (700, 1100, 344, "#cbbff0"), (1500, 1000, 345, "#b7d7ea"),
+                                              (2300, 1000, 330, "#c9bdee"), (3000, 900, 345, "#b9d4ee"))):
         g = 700.0 + 60 * k % 180
         n = 120
         xs_px = np.linspace(cx - w, cx + w, n)
@@ -202,6 +219,7 @@ def build_grass(V):
     P = on_ground(X, Y)
     d, half = path_dist(P)
     keep = (d > half + 0.2 * rng.random(len(P))) & (P[:, 1] < 176)
+    keep &= pond_r(P[:, 0], P[:, 1]) > 1.14 + 0.12 * rng.random(len(P))
     for ax, ay, r in ((512, 600, 3.4), (190, 500, 1.6)):     # bare round the nest and under the tree's foot
         c = on_ground(np.array([ax]), np.array([ay]))[0]
         keep &= np.hypot(P[:, 0] - c[0], P[:, 1] - c[1]) > r
@@ -232,6 +250,7 @@ def build_flowers():
     d, half = path_dist(P)
     patch = noise(P[:, 0], P[:, 1], 14.0, 21, 2)              # flowers grow in patches, a few on their own
     want = rng.random(len(P)) < np.where(patch > 0.25, 0.25, 0.012)
+    want &= pond_r(P[:, 0], P[:, 1]) > 1.25
     for i in np.nonzero((d > half + 0.4) & want)[0]:
         if np.hypot(X[i] - 512, (Y[i] - 600) * 2.2) < 190 or P[i, 1] > 168:
             continue
@@ -253,6 +272,8 @@ def build_pebbles():
     for p in PATH[::3]:
         for _ in range(3):
             q = p + np.array([rng.normal(0, 1.4), rng.normal(0, 1.4), 0])
+            if pond_r(q[0:1], q[1:2])[0] < 1.12:
+                continue
             r = rng.uniform(0.1, 0.28)
             Vs, Fs = D.stone_mesh(r, r * 0.8, r * 0.45, rng, (16, 8))
             q[2] = height(q[0], q[1]) + r * 0.1
@@ -356,9 +377,9 @@ def build_egg(c, R):
     D.mesh("egg", V, Sf, col, D.principled("eggm", rough=0.35, spec=0.4, sss=0.25, sss_scale=0.2, coat=0.2))
 
 
-def build_lanterns():
+def build_lanterns(spots=((372, 548), (836, 552)), first=0):
     names = []
-    for i, (x, y) in enumerate(((372, 548), (836, 552))):
+    for i, (x, y) in enumerate(spots, first):
         foot = at_px(x, y)
         s = project(foot)[1][0]
         u = 1.0 / s                                            # units per painted pixel
@@ -382,9 +403,10 @@ def build_lanterns():
     return names
 
 
-def build_sign():
-    """a wooden signpost with an arrow board pointing right (the game mirrors it); built at the right-hand signpost"""
-    foot = at_px(944, 560)
+def build_sign(x=944, y=560, name="sign", mirror=False):
+    """a wooden signpost with an arrow board pointing right (the game mirrors it for the one pointing back); its
+    picture is made at the meadow's signpost, and the mirrored one at the pond is built only for its shadow"""
+    foot = at_px(x, y)
     s = project(foot)[1][0]
     u = 1.0 / s
     B = D.Batch()
@@ -396,8 +418,11 @@ def build_sign():
     q[:, 0] = np.where(q[:, 0] > 0.55, 0.55 + (q[:, 0] - 0.55) * (1.0 - np.abs(q[:, 2]) * 1.2), q[:, 0])
     board = q * np.array([52 * u, 5 * u, 24 * u]) + foot + np.array([12 * u, -6 * u, 100 * u])
     cb = mix(np.tile(hexc("#f0d3a6"), (len(Vb), 1)), hexc("#e2b886"), smooth(0.5, -0.5, q[:, 2])[:, None])
+    if mirror:
+        board[:, 0] = 2 * foot[0] - board[:, 0]
+        Fb = np.asarray(Fb)[:, ::-1]
     B.add(board, Fb, cb)
-    B.build("sign", D.principled("signm", rough=0.7, spec=0.2))
+    B.build(name, D.principled("signm", rough=0.7, spec=0.2))
     return foot
 
 
@@ -432,9 +457,9 @@ BASKET_AT = (950, 704)                                         # Wardrobe.AT
 WEAR_SPOTS = {"crown": (-36, -26), "scarf": (0, -40), "bow": (36, -26)}   # Wardrobe.ITEMS spots, from the basket
 
 
-def build_basket():
+def build_basket(at=BASKET_AT, name="basket"):
     """a round woven basket with a handle: rows of willow wound over and under the stakes, a thick rim"""
-    foot = at_px(BASKET_AT[0], BASKET_AT[1] + 10)
+    foot = at_px(at[0], at[1] + 10)
     s = project(foot)[1][0]
     u = 1.0 / s
     B = D.Batch()
@@ -471,7 +496,7 @@ def build_basket():
         q = q + (nrm * np.cos(t * 2 * np.pi)[:, None] + np.array([0, 1.0, 0]) * np.sin(t * 2 * np.pi)[:, None]) * 3.7 * u
         Vt, Ft = Ub.tube(q, np.full(12, 1.2 * u), 6)
         B.add(Vt, Ft, hexc("#ecc38a"))
-    B.build("basket", D.principled("basketm", rough=0.8, spec=0.2, sheen=0.3))
+    B.build(name, D.principled("basketm", rough=0.8, spec=0.2, sheen=0.3))
     return foot, u
 
 
@@ -530,6 +555,147 @@ def build_wear(foot, u):
         B.build("wear_" + id_, D.principled("wearm", rough=0.6, spec=0.3, sheen=0.4))
         names[id_] = (BASKET_AT[0] + sx, BASKET_AT[1] + sy)
     return names
+
+
+def screen_to_water(X, Y):
+    """points on the water's surface under world pixels"""
+    return ground_ray(X, Y, WATER)
+
+
+def build_pond():
+    """the pond: still pale-blue water in its sandy bowl, lily pads with two pink flowers, reeds and bulrushes at both
+    ends, pale stones along the front shore (where pond.svg had them; the game draws the ripples and glints over it)"""
+    cx, cy = POND_C
+    rx, ry = POND_R
+    nt, na = 40, 160
+    ts = np.linspace(0.02, 1.12, nt)
+    an = np.linspace(0, 2 * np.pi, na, endpoint=False)
+    T, A = np.meshgrid(ts, an, indexing="ij")
+    X, Y = cx + rx * T * np.cos(A), cy + ry * T * np.sin(A)
+    V = screen_to_water(X.ravel(), Y.ravel())
+    F = np.array(Ub.grid_faces(nt, na, wrap_v=True))
+    V = np.vstack([V, screen_to_water(np.array([cx]), np.array([cy]))])        # close the middle
+    F = np.vstack([F, [(len(V) - 1, (k + 1) % na, k) for k in range(na)]])
+    X, Y = np.append(X.ravel(), cx), np.append(Y.ravel(), cy)
+    v = np.clip((Y.ravel() - (cy - ry)) / (2 * ry), 0, 1)        # far side a deeper blue, near side paler
+    col = mix(np.tile(hexc("#7fbede"), (len(V), 1)), hexc("#b4def0"), v[:, None])
+    hl = np.hypot((X.ravel() - (cx - 0.1 * rx)) / (0.55 * rx), (Y.ravel() - (cy - 0.3 * ry)) / (0.5 * ry))
+    col = mix(col, hexc("#e6f6fb"), smooth(1.0, 0.0, hl)[:, None] * 0.6)
+    D.mesh("water", V, F, col, D.principled("waterm", rough=0.12, spec=0.12))
+    outward("water")
+    s = project(screen_to_water(np.array([cx]), np.array([cy])))[1][0]
+    u = 1.0 / s
+    pads, bq = D.Batch(), Ub.Bouquet()
+    for (px_, py_, r), fl in zip(((150, 104, 22), (196, 120, 15), (430, 88, 26), (470, 112, 16), (330, 128, 14)),
+                                 (True, False, True, False, False)):
+        c = screen_to_water(np.array([cx + px_ - 300.0]), np.array([cy + py_ - 92.0]))[0] + np.array([0, 0, 0.02])
+        R = r * u * 1.15
+        notch = rng.uniform(0, 2 * np.pi)
+        a = np.linspace(notch + 0.35, notch + 2 * np.pi - 0.35, 40)
+        rim = np.stack([np.cos(a), np.sin(a), np.zeros_like(a)], 1) * R
+        Vp = np.vstack([np.zeros((1, 3)), rim]) + c
+        Fp = [(0, k + 1, k + 2) for k in range(len(a) - 1)]
+        cp = np.tile(hexc("#9fd39a")[:3], (len(Vp), 1))
+        cp[0] = hexc("#c7ebb8")[:3]
+        pads.add(Vp, Fp, cp)
+        Vr, Fr = Ub.tube(rim + c, np.full(len(rim), 0.035), 5, close_ends=False)
+        pads.add(Vr, Fr, hexc("#8cc184"))
+        if fl:
+            Ub.flower(bq, c + np.array([R * 0.2, R * 0.1, 0.06]), np.array([0, -0.3, 1.0]), 9 * u * 1.3, 6,
+                      (hexc("#ffc2d6"), hexc("#ffe0ea"), hexc("#ffb3cf") * 0.9), 2)
+    pads.build("lilypads", D.principled("padm", rough=0.45, spec=0.35, sheen=0.2))
+    bq.build("pondflowers")
+    reeds, heads = D.Batch(), D.Batch()
+    for x0, side in ((30, -1), (60, -1), (548, 1), (575, 1)):
+        for k in range(5):
+            x = cx + x0 - 300 + rng.uniform(-10, 10)
+            foot = at_px(x, cy + 120 - 92 + rng.uniform(-6, 4))
+            uu = 1.0 / project(foot)[1][0]
+            hgt = rng.uniform(60, 115) * uu
+            lean = side * rng.uniform(4, 16) * uu
+            ts_ = np.linspace(0, 1, 8)
+            pts = foot + np.stack([lean * ts_ ** 2, np.zeros(8), hgt * ts_], 1) + np.array([0, 0, -0.1])
+            Vr, Fr = Ub.tube(pts, (2.2 * (1 - 0.7 * ts_) + 0.4) * uu, 8)
+            reeds.add(Vr, Fr, mix(np.tile(hexc("#86c48c"), (len(Vr), 1)), hexc("#b6e0a8"),
+                                  smooth(0, hgt, Vr[:, 2] - foot[2])[:, None]))
+            if k % 2 == 0:                                       # a bulrush head
+                Vh, Fh = D.sphere_mesh(12, 8)
+                hc = foot + np.array([lean * 0.64, 0, hgt * 0.8])
+                heads.add(Vh * np.array([5, 5, 13]) * uu + hc, Fh, hexc("#b98d74"))
+            else:                                                # or a long leaf arching out
+                tl = np.linspace(0, 1, 8)
+                lp = foot + np.stack([side * (3 + 22 * tl ** 1.6) * uu, -1.0 * uu * tl,
+                                      hgt * 0.75 * np.sin(tl * 1.3) / np.sin(1.3)], 1)
+                Vl, Fl = Ub.tube(lp, (3.0 * (1 - tl) + 0.4) * uu, 6)
+                reeds.add(Vl, Fl, hexc("#9fd39a"))
+    reeds.build("reeds", D.principled("reedm", rough=0.6, spec=0.25, sheen=0.3))
+    heads.build("bulrushes", D.principled("rushm", rough=0.8, spec=0.15, sheen=0.4))
+    stones = D.Batch()
+    for sx, sy in ((80, 150), (540, 146), (300, 176), (210, 168), (400, 170)):
+        g = at_px(cx + sx - 300, cy + sy - 92)
+        us = 1.0 / project(g)[1][0]
+        r = rng.uniform(10, 16) * us
+        Vs, Fs = D.stone_mesh(r, r * 0.7, r * 0.42, rng, (24, 12))
+        stones.add(Vs + g + np.array([0, 0, r * 0.12]), Fs, hexc("#d8d2e6") * rng.uniform(0.95, 1.04))
+    stones.build("pondstones", D.principled("stonem", rough=0.55, spec=0.3))
+
+
+DECOR_AT = (1940, 704)                                         # DecorBasket.AT
+LOOSE_AT = {"plant": (1300, 724), "ball": (1460, 732), "lantern2": (1780, 730)}   # where the loose things are made
+
+
+def build_plant():
+    """a flowering plant in a terracotta pot (the canvas of plant.svg: 100 x 120, its foot at 50, 116)"""
+    foot = at_px(*LOOSE_AT["plant"])
+    u = 1.0 / project(foot)[1][0]
+    B, bq = D.Batch(), Ub.Bouquet()
+    ts = np.linspace(0, 1, 12)
+    an = np.linspace(0, 2 * np.pi, 48, endpoint=False)
+    Tt, A = np.meshgrid(ts, an, indexing="ij")
+    rr = (17 + 7 * Tt) * u
+    Vp = np.stack([np.cos(A) * rr, np.sin(A) * rr, Tt * 38 * u], -1).reshape(-1, 3) + foot
+    Fp = np.array(Ub.grid_faces(12, 48, wrap_v=True))
+    lit = smooth(-0.6, 0.8, -np.cos(A).ravel())
+    B.add(Vp, Fp, mix(np.tile(hexc("#d98f7a"), (len(Vp), 1)), hexc("#f2b8a0"), lit[:, None]))
+    Vr, Fr = ring(foot + np.array([0, 0, 38 * u]), 25 * u, 25 * u, 4.5 * u, 64)
+    B.add(Vr, Fr, hexc("#f6c8b2"))
+    Vd, Fd = D.sphere_mesh(24, 12)
+    B.add(Vd * np.array([22, 22, 3]) * u + foot + np.array([0, 0, 35 * u]), Fd, hexc("#8a6a54"))
+    B.add(Vd * np.array([17, 17, 2]) * u + foot + np.array([0, 0, 0.5 * u]), Fd, hexc("#d98f7a"))
+    top = foot + np.array([0, 0, 36 * u])
+    for a, ln, colr in ((-0.5, 34, "#ffb3cf"), (-0.15, 46, "#cdb8f4"), (0.25, 40, "#ffc9a0"), (0.6, 30, "#ffb3cf")):
+        y = rng.uniform(-4, 4) * u
+        pts = np.array([top, top + np.array([np.sin(a) * ln * 0.3 * u, y, ln * 0.6 * u]),
+                        top + np.array([np.sin(a) * ln * u, y * 1.5, np.cos(a) * ln * u])])
+        c = D.curve(pts, 12)
+        Vs, Fs = Ub.tube(c, np.full(len(c), 1.7 * u), 8)
+        B.add(Vs, Fs, hexc("#8ccc92"))
+        mid = pts[1] * 0.5 + pts[2] * 0.5
+        Vl, Fl = D.sphere_mesh(16, 8)
+        lv = Vl * np.array([9, 2.2, 4.5]) * u
+        ang = a - 0.7
+        lv = lv @ np.array([[math.cos(ang), 0, math.sin(ang)], [0, 1, 0], [-math.sin(ang), 0, math.cos(ang)]])
+        B.add(lv + mid + np.array([math.cos(a) * 6 * u, -2 * u, 0]), Fl, hexc("#a6d79c"))
+        Ub.flower(bq, pts[2], unit(np.array([np.sin(a) * 0.6, -1.0, 0.6])), 10 * u, 5,
+                  (hexc(colr), mix(hexc(colr), hexc("#ffffff"), 0.5), hexc(colr) * 0.9), 2)
+    B.build("plant", D.principled("plantm", rough=0.6, spec=0.25, sheen=0.2))
+    bq.build("plantflowers")
+    return ["plant", "plantflowers_petal", "plantflowers_centre", "plantflowers_leaf"]
+
+
+def build_ball():
+    """a soft beach ball: cream, with pink, yellow and blue panels (ball.svg's canvas: 64 x 64, its foot at 32, 60)"""
+    foot = at_px(*LOOSE_AT["ball"])
+    u = 1.0 / project(foot)[1][0]
+    r = 27 * u
+    Sv, Sf = D.sphere_mesh(64, 32)
+    lon = np.arctan2(Sv[:, 1], Sv[:, 0]) + 0.6
+    seg = np.floor((lon % (2 * np.pi)) / (2 * np.pi) * 6).astype(int) % 6
+    pal = np.array([hexc(c)[:3] for c in ("#ffb3cf", "#fff4e0", "#ffe39a", "#fff4e0", "#9fc9f0", "#fff4e0")])
+    col = pal[seg]
+    col = mix(col, hexc("#fffaf0")[:3], smooth(0.86, 0.9, np.abs(Sv[:, 2]))[:, None])     # white caps
+    D.mesh("ball", Sv * r + foot + np.array([0, 0, r]), Sf, col, D.principled("ballm", rough=0.3, spec=0.45, coat=0.3))
+    return ["ball"]
 
 
 APPLE_AT = (700, 690)                                          # where the apple is made: front of the walkable ground
@@ -692,15 +858,27 @@ def main():
     lan = build_lanterns()
     build_sign()
     props["sign"] = ["sign"]
+    build_sign(1104, 592, "sign_back", True)                   # the pond's signpost, pointing back: only its shadow
+    props["sign_back"] = ["sign_back"]
+    build_pond()
     bfoot, bu = build_basket()
     props["basket"] = ["basket"]
+    build_basket(DECOR_AT, "basket_east")
+    props["basket_east"] = ["basket_east"]
     wear = build_wear(bfoot, bu)
     for id_ in wear:
         props["wear_" + id_] = ["wear_" + id_]
     props["apple"], apple_px = build_apple()
-    for n in ["basket", "apple", "applestem"] + ["wear_" + i for i in wear]:
+    props["plant"] = build_plant()
+    props["ball"] = build_ball()
+    props["lantern2"] = build_lanterns((LOOSE_AT["lantern2"],), 2)[0]
+    for n in ["basket", "basket_east", "apple", "applestem", "plant", "ball", "lantern2"] + ["wear_" + i for i in wear]:
         outward(n)
-    loose = {"nest_back", "nest_front", "egg", "apple", "applestem"} | {"wear_" + i for i in wear}
+    props = {k: [n for n in v if n in bpy.data.objects] for k, v in props.items()}   # (a bouquet makes only the parts it has)
+    grounded = ("plant", "lantern2")                          # loose things that stand on the grass: their own shadow
+    loose_free = ("ball",)                                     # (the ball rolls and spins: the game gives it a shadow)
+    loose = {"nest_back", "nest_front", "egg", "apple", "applestem"} | {"wear_" + i for i in wear} | \
+            {n for k in grounded + loose_free for n in props[k]}
     prop_names = {n for v in props.values() for n in v} | {n for l in lan for n in l}
     for ob in bpy.data.objects:                               # props are drawn separately; their shadows stay
         if ob.name in prop_names:
@@ -708,25 +886,44 @@ def main():
         if ob.name in loose:                                  # (not the nest's: the ground under it shows between straws;
             ob.visible_shadow = False                         # nor things that move)
     if "backdrop" in PARTS:
-        render_box("meadow", -512, -128, 2048, 1024, {o.name for o in bpy.data.objects if o.name not in prop_names}, False)
+        back = {o.name for o in bpy.data.objects if o.name not in prop_names}
+        render_box("meadow", -512, -128, 2048, 1024, back, False, hide=loose)   # (things that move: not there at all,
+        render_box("meadow_east", 1536, -128, 1536, 1024, back, False, hide=loose)   # or they darken the grass)
     # each prop on the canvas of the drawing it replaces (world-pixel box from its origin)
     boxes = {"tree": (190, 500, 400, 480, 200, 470), "nest_back": (512, 600, 240, 110, 120, 50),
              "nest_front": (512, 600, 240, 110, 120, 50), "egg": (512, 622, 120, 150, 60, 146),
              "lantern": (372, 548, 80, 140, 40, 136), "sign": (944, 560, 120, 150, 40, 146),
              "basket": (BASKET_AT[0], BASKET_AT[1], 160, 124, 80, 96),
-             "apple": (apple_px[0], apple_px[1], 96, 96, 48, 48)}
+             "basket_east": (DECOR_AT[0], DECOR_AT[1], 160, 124, 80, 96),
+             "apple": (apple_px[0], apple_px[1], 96, 96, 48, 48),
+             "plant": (*LOOSE_AT["plant"], 100, 120, 50, 116), "ball": (*LOOSE_AT["ball"], 64, 64, 32, 60),
+             "lantern2": (*LOOSE_AT["lantern2"], 80, 140, 40, 136)}
     for id_, (x, y) in wear.items():                          # each 64 x 64, centred on its spot
         boxes["wear_" + id_] = (x, y, 64, 64, 32, 32)
     show = dict(props, lantern=lan[0])
+    meshes = [o.name for o in bpy.data.objects if o.type in ("MESH", "CURVES")]
+    land = bpy.data.objects["land"]
     for name, (ax, ay, w, h, ox, oy) in boxes.items():
         part = name.split("_")[0]
-        if part in PARTS or name in PARTS:
-            hide = set()
-            if name in ("basket", "apple") or name.startswith("wear_"):   # loose things: no grass round them
-                hide = {o.name for o in bpy.data.objects if o.type == "CURVES" or o.name in ("grass", "flowers", "flowerdots", "pebbles")}
-            if name.startswith("wear_"):                       # (and nothing of the basket in their way)
-                hide |= {"basket"} | {"wear_" + i for i in wear if "wear_" + i != name}
-            render_box(name, ax - ox, ay - oy, w, h, set(show[name]), hide=hide)
+        if not (part in PARTS or name in PARTS or name.rstrip("2") in PARTS):
+            continue
+        hide = set()
+        if name in ("basket", "basket_east", "apple", "ball") or name.startswith("wear_"):   # loose things: no grass round them
+            hide = {n for n in meshes if bpy.data.objects[n].type == "CURVES" or n.startswith(("flowers", "flowerdots", "pebbles"))}
+        if name.startswith("wear_"):                           # (and nothing of the basket in their way)
+            hide |= {"basket"} | {"wear_" + i for i in wear if "wear_" + i != name}
+        hide |= loose - set(show[name])
+        if name in grounded:                                   # on bare ground that only catches its shadow
+            hide = {n for n in meshes if n not in show[name] and n != "land"}
+            land.is_shadow_catcher = True
+            for n in show[name]:
+                bpy.data.objects[n].visible_shadow = True
+            render_box(name, ax - ox, ay - oy, w, h, set(show[name]) | {"land"}, hide=hide)
+            land.is_shadow_catcher = False
+            for n in show[name]:
+                bpy.data.objects[n].visible_shadow = False
+            continue
+        render_box(name, ax - ox, ay - oy, w, h, set(show[name]), hide=hide)
 
 
 main()
