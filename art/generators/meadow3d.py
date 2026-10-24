@@ -10,11 +10,13 @@ coordinates are the game's meadow pixels (1x; the pictures are made at 2x for Re
 
 Each picture keeps the canvas and origin of the drawing it replaces (game/art/meadow/*.svg), so the game only loads a
 different file:  meadow.png (x -512..1536, y -128..896), tree.png, nest_back.png, nest_front.png, egg.png,
-lantern.png, sign.png. The props cast their shadows into the backdrop but are drawn separately (the game sorts them
-with the creatures).
+lantern.png, sign.png, basket.png. The props cast their shadows into the backdrop but are drawn separately (the game
+sorts them with the creatures). The things that move (apple.png and the things to wear in the basket, wear_crown.png,
+wear_scarf.png, wear_bow.png) are made where they first sit, centred on their own point, without shadows, and with no
+grass round them.
 
 Run:  blender -b --factory-startup -P meadow3d.py -- OUT_DIR [--quick] [part ...]
-      parts: backdrop tree nest egg lantern sign (default: all)      --quick  fewer grass blades, half size"""
+      parts: backdrop tree nest egg lantern sign basket wear apple (default: all)      --quick  fewer grass blades, half size"""
 import os, sys, math, json, time
 import bpy
 import numpy as np
@@ -23,7 +25,7 @@ from mathutils import Vector
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
 OUT = os.path.abspath(argv[0] if argv else "meadow3d_out")
 QUICK = "--quick" in argv
-PARTS = [a for a in argv[1:] if not a.startswith("--")] or ["backdrop", "tree", "nest", "egg", "lantern", "sign"]
+PARTS = [a for a in argv[1:] if not a.startswith("--")] or ["backdrop", "tree", "nest", "egg", "lantern", "sign", "basket", "wear", "apple"]
 sys.argv = [sys.argv[0], "--", "unused", "--quick"]          # collie_d.py (shared helpers) reads its options from here
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import collie_d as D
@@ -399,6 +401,170 @@ def build_sign():
     return foot
 
 
+def ring(c, rx, ry, r, n=48, tilt=0.0, wave=0.0, waves=0, phase=0.0):
+    """a closed tube round the point c, radii rx (sideways) and ry (in depth), tipped toward the camera by `tilt`"""
+    a = np.linspace(0, 2 * np.pi, n + 1)
+    rr = 1.0 + wave * np.sin(a * waves + phase)
+    pts = np.stack([np.cos(a) * rx * rr, np.sin(a) * ry * rr, np.zeros_like(a)], 1)
+    ct, st = math.cos(tilt), math.sin(tilt)
+    pts = pts @ np.array([[1, 0, 0], [0, ct, st], [0, -st, ct]])   # tip the far side up, so it shows as a ring
+    return Ub.tube(pts + c, np.full(len(pts), r), 10, close_ends=False)
+
+
+def outward(name):
+    """make every face of a made-up object face outward (mirrored parts and tube ends come out mixed)"""
+    import bmesh
+    me = bpy.data.objects[name].data
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
+
+
+def at_plane(x, y, depth):
+    """the point at this depth (model y) seen at world pixel (x, y)"""
+    d = FWD + RIGHT * ((x - CX) / F) - UPV * ((y - CY) / F)
+    return CAM + d * ((depth - CAM[1]) / d[1])
+
+
+BASKET_AT = (950, 704)                                         # Wardrobe.AT
+WEAR_SPOTS = {"crown": (-36, -26), "scarf": (0, -40), "bow": (36, -26)}   # Wardrobe.ITEMS spots, from the basket
+
+
+def build_basket():
+    """a round woven basket with a handle: rows of willow wound over and under the stakes, a thick rim"""
+    foot = at_px(BASKET_AT[0], BASKET_AT[1] + 10)
+    s = project(foot)[1][0]
+    u = 1.0 / s
+    B = D.Batch()
+    Hb, Rt, Rb, dep = 32 * u, 58 * u, 44 * u, 0.8
+    rows = 7
+    for k in range(rows):                                      # the weave: each row waves over and under the stakes
+        t = (k + 0.5) / rows
+        z, rad = Hb * t, Rb + (Rt - Rb) * t
+        Vr, Fr = ring(foot + np.array([0, 0, z]), rad, rad * dep, Hb / rows * 0.62, 96, 0.0, 0.035, 16, k * np.pi)
+        B.add(Vr, Fr, hexc(["#e8bb80", "#ddaa70"][k % 2]) * rng.uniform(0.95, 1.05))
+    for k in range(16):                                        # the stakes between
+        a = 2 * np.pi * k / 16
+        p0 = foot + np.array([np.cos(a) * Rb, np.sin(a) * Rb * dep, 0.0])
+        p1 = foot + np.array([np.cos(a) * Rt, np.sin(a) * Rt * dep, Hb])
+        Vs, Fs = Ub.tube(np.array([p0, p1]), np.full(2, 2.2 * u), 8)
+        B.add(Vs, Fs, hexc("#d0a06a"))
+    Vd, Fd = D.sphere_mesh(32, 16)                              # the floor inside, a little shaded
+    Vd = Vd * np.array([Rt * 0.97, Rt * dep * 0.97, 2 * u]) + foot + np.array([0, 0, Hb * 0.55])
+    B.add(Vd, Fd, hexc("#b08a60"))
+    Vc, Fc = D.sphere_mesh(32, 16)                              # the bottom
+    B.add(Vc * np.array([Rb, Rb * dep, 2 * u]) + foot + np.array([0, 0, 1 * u]), Fc, hexc("#b98652"))
+    Vr, Fr = ring(foot + np.array([0, 0, Hb]), Rt, Rt * dep, 5 * u, 96)
+    B.add(Vr, Fr, hexc("#d8a872"))
+    a =np.linspace(np.pi * 0.06, np.pi * 0.94, 40)               # the handle, an arch across
+    pts = np.stack([np.cos(a) * 52 * u, np.zeros_like(a), Hb + np.sin(a) * 54 * u - 6 * u], 1) + foot
+    Vh, Fh = Ub.tube(pts, np.full(len(pts), 3.6 * u), 10)
+    B.add(Vh, Fh, hexc("#cc9a64"))
+    for k in range(10):                                        # a ribbon wound round it
+        t = np.linspace(0, 1, 12)
+        aa = a[0] + (a[-1] - a[0]) * (k + t) / 10
+        q = np.stack([np.cos(aa) * 52 * u, np.zeros_like(aa), Hb + np.sin(aa) * 54 * u - 6 * u], 1) + foot
+        nrm = np.stack([np.cos(aa), np.zeros_like(aa), np.sin(aa)], 1)
+        side = np.cross(nrm, np.array([0, 1.0, 0]))
+        q = q + (nrm * np.cos(t * 2 * np.pi)[:, None] + np.array([0, 1.0, 0]) * np.sin(t * 2 * np.pi)[:, None]) * 3.7 * u
+        Vt, Ft = Ub.tube(q, np.full(12, 1.2 * u), 6)
+        B.add(Vt, Ft, hexc("#ecc38a"))
+    B.build("basket", D.principled("basketm", rough=0.8, spec=0.2, sheen=0.3))
+    return foot, u
+
+
+def build_wear(foot, u):
+    """the three things to wear, each sitting in the basket at its spot (Wardrobe.ITEMS), the 3D models' colours"""
+    depth = foot[1]
+    names = {}
+    for id_, (sx, sy) in WEAR_SPOTS.items():
+        c = at_plane(BASKET_AT[0] + sx, BASKET_AT[1] + sy, depth)
+        B = D.Batch()
+        if id_ == "crown":
+            tilt = 0.55
+            Vr, Fr = ring(c, 20 * u, 20 * u, 3 * u, 64, tilt)
+            B.add(Vr, Fr, hexc("#8cc78a"))
+            fl = ["#f7a8c8", "#c9a8f0", "#fff1c9", "#ffc3a0", "#a8d8f5"]
+            ct, st = math.cos(tilt), math.sin(tilt)
+            for k in range(7):
+                a = 2 * np.pi * k / 7 + 0.3
+                p = np.array([np.cos(a) * 20 * u, np.sin(a) * 20 * u, 0.0]) @ np.array([[1, 0, 0], [0, ct, st], [0, -st, ct]]) + c
+                Vf, Ff = D.sphere_mesh(16, 8)
+                for j in range(5):                              # five round petals and a yellow middle
+                    b = 2 * np.pi * j / 5 + a
+                    off = np.array([np.cos(b), -0.4, np.sin(b)]) * 4.0 * u
+                    B.add(Vf * np.array([3.6, 2.4, 3.6]) * u + p + off, Ff, hexc(fl[k % 5]))
+                B.add(Vf * 2.4 * u + p + np.array([0, -2.5 * u, 0]), Ff, hexc("#ffe08a"))
+                b = a + np.pi / 7
+                q = np.array([np.cos(b) * 21 * u, np.sin(b) * 21 * u, 0.0]) @ np.array([[1, 0, 0], [0, ct, st], [0, -st, ct]]) + c
+                B.add(Vf * np.array([4.5, 1.5, 2.2]) * u + q, Ff, hexc("#7fbf7a"))
+        elif id_ == "scarf":
+            tilt = 0.5
+            for dz, col in ((-5.5, "#c9a8f0"), (-2.7, "#fff1c9"), (0.0, "#c9a8f0"), (2.7, "#fff1c9"), (5.5, "#c9a8f0")):
+                Vr, Fr = ring(c + np.array([0, 0, dz * u]), 18 * u, 18 * u, 3.4 * u, 64, tilt)   # a knitted band, striped
+                B.add(Vr, Fr, hexc(col))
+            Vb, Fb = D.sphere_mesh(24, 12)                       # the loose end hanging down in front
+            q = np.sign(Vb) * np.abs(Vb) ** 0.4
+            end = q * np.array([6.5 * u, 2.5 * u, 14 * u]) + c + np.array([12 * u, -16 * u, -12 * u])
+            B.add(end, Fb, hexc("#c9a8f0"))
+            Vs, Fs = D.sphere_mesh(16, 6)
+            for j in range(4):                                   # its fringe
+                B.add(Vs * np.array([1.2, 1.2, 3.2]) * u + c + np.array([(8 + 2.8 * j) * u, -17 * u, -28 * u]), Fs, hexc("#fff1c9"))
+            Vt, Ft = Ub.tube(np.array([c + np.array([6 * u, -18.6 * u, -6 * u]), c + np.array([18.5 * u, -18.6 * u, -6 * u])]), np.full(2, 1.4 * u), 6)
+            B.add(Vt, Ft, hexc("#fff1c9"))
+        else:                                                  # the bow, facing the camera
+            Vk, Fk = D.sphere_mesh(20, 10)
+            B.add(Vk * np.array([6, 4.5, 6]) * u + c, Fk, hexc("#f58fb6"))
+            for side in (-1, 1):
+                a = np.linspace(0, 2 * np.pi, 49)
+                lp = np.stack([side * (11 + 11 * np.cos(a + np.pi)) * u * 0.95, np.zeros_like(a), np.sin(a) * 8.5 * u], 1)
+                lp[:, 0] *= 1.0
+                Vl, Fl = Ub.tube(lp + c + np.array([side * 1.5 * u, 0.5 * u, 1.5 * u]), np.full(49, 3.6 * u), 10, close_ends=False)
+                B.add(Vl, Fl, hexc("#f7a8c8"))
+                tl = np.array([c + np.array([side * 1 * u, -1 * u, -2 * u]), c + np.array([side * 6 * u, -1.5 * u, -12 * u]),
+                               c + np.array([side * 10 * u, -1 * u, -20 * u])])
+                Vt, Ft = Ub.tube(tl, np.array([3.2, 3.0, 2.6]) * u, 10)
+                B.add(Vt * np.array([1, 1, 1]), Ft, hexc("#f58fb6"))
+        B.build("wear_" + id_, D.principled("wearm", rough=0.6, spec=0.3, sheen=0.4))
+        names[id_] = (BASKET_AT[0] + sx, BASKET_AT[1] + sy)
+    return names
+
+
+APPLE_AT = (700, 690)                                          # where the apple is made: front of the walkable ground
+
+
+def build_apple():
+    """an apple, glossy red with a lighter cheek, a stem and a leaf; made once, near the front, and drawn anywhere"""
+    g = at_px(*APPLE_AT)
+    s = project(g)[1][0]
+    u = 2.0 / s                                                # (the painted apple was drawn at half size, shown at 2x)
+    r = 13 * u
+    c = g + np.array([0, 0, r])
+    Sv, Sf = D.sphere_mesh(48, 24)
+    z = Sv[:, 2]
+    rho = np.sqrt(Sv[:, 0] ** 2 + Sv[:, 1] ** 2)
+    zz = z - 0.28 * np.exp(-(rho / 0.32) ** 2) * np.sign(z) * (np.abs(z) > 0.2)   # dimples top and bottom
+    w = 1.04 - 0.1 * smooth(-0.9, 0.9, z)                        # a little wider at the shoulders
+    V = np.stack([Sv[:, 0] * w * 1.06, Sv[:, 1] * w, zz * 0.93], 1) * r + c
+    light = smooth(-0.3, 0.9, unit(Sv) @ unit(np.array([-0.6, -0.5, 0.6])))
+    col = mix(np.tile(hexc("#f45f72"), (len(V), 1)), hexc("#ff9aa6"), light[:, None] * 0.7)
+    col = mix(col, hexc("#ffd27a"), smooth(0.85, 1.0, unit(Sv) @ unit(np.array([0.3, -0.8, 0.5])))[:, None] * 0.35)
+    D.mesh("apple", V, Sf, col, D.principled("applem", rough=0.3, spec=0.5, coat=0.4))
+    B = D.Batch()
+    top = c + np.array([0, 0, r * 0.68])
+    Vs, Fs = Ub.tube(np.array([top, top + np.array([0.6 * u, 0, 5 * u]), top + np.array([2.5 * u, 0, 9 * u])]), np.full(3, 1.3 * u), 8)
+    B.add(Vs, Fs, hexc("#9c6f58"))
+    Vl, Fl = D.sphere_mesh(20, 10)
+    lv = Vl * np.array([5.5, 1.2, 2.6]) * u
+    ang = 0.45
+    lv = lv @ np.array([[math.cos(ang), 0, math.sin(ang)], [0, 1, 0], [-math.sin(ang), 0, math.cos(ang)]])
+    B.add(lv + top + np.array([6 * u, -0.5 * u, 6.5 * u]), Fl, hexc("#7fbf6a"))
+    B.build("applestem", D.principled("stemm", rough=0.6, spec=0.3))
+    return ["apple", "applestem"], project(c)[0][0]
+
+
 # ================================================================== light, sky, render
 def light_and_sky():
     sc = bpy.context.scene
@@ -482,12 +648,14 @@ def camera():
     sc.render.resolution_percentage = 100
 
 
-def render_box(name, x, y, w, h, show, transparent=True):
-    """render the world-pixel box (x, y, w, h) with only the objects named in `show` seen by the camera"""
+def render_box(name, x, y, w, h, show, transparent=True, hide=()):
+    """render the world-pixel box (x, y, w, h) with only the objects named in `show` seen by the camera, and those
+    in `hide` left out altogether (so they neither shade it nor stand in its way)"""
     sc = bpy.context.scene
     for ob in bpy.data.objects:
         if ob.type in ("MESH", "CURVES"):
             ob.visible_camera = show is None or ob.name in show
+            ob.hide_render = ob.name in hide
     sc.render.use_border = True
     sc.render.use_crop_to_border = True
     sc.render.border_min_x = (x - X0) / WPX
@@ -524,23 +692,41 @@ def main():
     lan = build_lanterns()
     build_sign()
     props["sign"] = ["sign"]
+    bfoot, bu = build_basket()
+    props["basket"] = ["basket"]
+    wear = build_wear(bfoot, bu)
+    for id_ in wear:
+        props["wear_" + id_] = ["wear_" + id_]
+    props["apple"], apple_px = build_apple()
+    for n in ["basket", "apple", "applestem"] + ["wear_" + i for i in wear]:
+        outward(n)
+    loose = {"nest_back", "nest_front", "egg", "apple", "applestem"} | {"wear_" + i for i in wear}
     prop_names = {n for v in props.values() for n in v} | {n for l in lan for n in l}
     for ob in bpy.data.objects:                               # props are drawn separately; their shadows stay
         if ob.name in prop_names:
             ob.visible_camera = False
-        if ob.name in ("nest_back", "nest_front", "egg"):     # (but not the nest's: the ground under it shows between straws)
-            ob.visible_shadow = False
+        if ob.name in loose:                                  # (not the nest's: the ground under it shows between straws;
+            ob.visible_shadow = False                         # nor things that move)
     if "backdrop" in PARTS:
         render_box("meadow", -512, -128, 2048, 1024, {o.name for o in bpy.data.objects if o.name not in prop_names}, False)
     # each prop on the canvas of the drawing it replaces (world-pixel box from its origin)
     boxes = {"tree": (190, 500, 400, 480, 200, 470), "nest_back": (512, 600, 240, 110, 120, 50),
              "nest_front": (512, 600, 240, 110, 120, 50), "egg": (512, 622, 120, 150, 60, 146),
-             "lantern": (372, 548, 80, 140, 40, 136), "sign": (944, 560, 120, 150, 40, 146)}
+             "lantern": (372, 548, 80, 140, 40, 136), "sign": (944, 560, 120, 150, 40, 146),
+             "basket": (BASKET_AT[0], BASKET_AT[1], 160, 124, 80, 96),
+             "apple": (apple_px[0], apple_px[1], 96, 96, 48, 48)}
+    for id_, (x, y) in wear.items():                          # each 64 x 64, centred on its spot
+        boxes["wear_" + id_] = (x, y, 64, 64, 32, 32)
     show = dict(props, lantern=lan[0])
     for name, (ax, ay, w, h, ox, oy) in boxes.items():
         part = name.split("_")[0]
-        if part in PARTS:
-            render_box(name, ax - ox, ay - oy, w, h, set(show[name]))
+        if part in PARTS or name in PARTS:
+            hide = set()
+            if name in ("basket", "apple") or name.startswith("wear_"):   # loose things: no grass round them
+                hide = {o.name for o in bpy.data.objects if o.type == "CURVES" or o.name in ("grass", "flowers", "flowerdots", "pebbles")}
+            if name.startswith("wear_"):                       # (and nothing of the basket in their way)
+                hide |= {"basket"} | {"wear_" + i for i in wear if "wear_" + i != name}
+            render_box(name, ax - ox, ay - oy, w, h, set(show[name]), hide=hide)
 
 
 main()

@@ -18,9 +18,8 @@ func _ready() -> void:
 	glow.texture = Fx.glow_texture(Color(1.0, 0.82, 0.38, 0.95), 128)
 	glow.modulate.a = 0.0
 	add_child(glow)
-	sprite.texture = load("res://art/meadow/apple.svg")
+	sprite.texture = load("res://art/meadow3d/apple.png")   # rendered at 2x, centred on the apple
 	sprite.scale = Vector2.ONE * 0.5
-	sprite.offset = Vector2(0, -8)
 	add_child(sprite)
 
 

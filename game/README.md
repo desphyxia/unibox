@@ -125,9 +125,12 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   squash hides it.
 - Trait colours (values in `scripts/traits.gd`): the coat's apricot band and the bright foxfire band get new colours,
   everything else stays. Eight coats and five glows. The baby is the adult model at about two thirds size.
-- The meadow and pond art is drawn from code (`art/generators/meadow.py`; the two places' backdrop is one drawing
-  saved as two halves, `meadow.svg` and `meadow_east.svg`, imported with the same high-quality compression so the
-  join doesn't show).
+- The meadow is rendered in 3D from code with the creatures' light (`art/generators/meadow3d.py`, Blender): the sky,
+  hills, grass, flowers and path as one backdrop (`art/meadow3d/meadow.png`), and the tree, nest, egg, lanterns,
+  signpost, basket, apples and the things to wear as their own pictures, each with the canvas and origin of the
+  drawing it replaced, so nothing in the game moved. The fixed props cast their shadows into the backdrop. The pond
+  half is still the drawing from `art/generators/meadow.py` (`meadow_east.svg`, imported with the same high-quality
+  compression so the join doesn't show), and so are its basket's things.
 - The sounds are synthesised (`art/generators/sfx.py`).
 - The music is made from code (`art/generators/music.py`): a day tune (76 beats a minute: a warm pad, a soft bass and a
   music-box melody over Fmaj7, Dm7, Bbmaj7, Csus4, Fmaj7, Am7, Bbmaj7, C7) and a slower, lower night lullaby on the
