@@ -149,4 +149,6 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
 - **Local web build:** export the "Web" preset to `build/web`, run `python serve_web.py`, and open the printed
   address on the same Wi-Fi. Sound is off this way, because a home network serves plain http.
 - **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn|collie]` plays through the session (choosing that kind's bubble first) with simulated
-  touches and saves a screenshot at each step.
+  touches and saves a screenshot at each step. `godot --path . res://tests/turn_check.tscn -- [fox|unicorn|collie]`
+  turns a creature round sitting and standing and prints how far its picture moves each frame, so a jump when a turn
+  ends shows up as one big step.
