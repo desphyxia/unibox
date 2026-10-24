@@ -13,6 +13,7 @@ const WORDS := ["zero", "one", "two", "three", "four", "five", "six", "seven", "
 const HOLD_SECONDS := 1.2
 const INK := Color(0.29, 0.18, 0.28)
 const ACCENT := Color(0.85, 0.34, 0.5)
+const CORNER := 90.0                   ## the corner button's size (screen pixels): easy for a grown-up's finger to find
 
 var blocking := false               ## true while a gate or panel is open: the meadow ignores touches
 var corner := Control.new()
@@ -26,8 +27,8 @@ var _time_speed := 1.0
 
 func _ready() -> void:
 	layer = 10
-	corner.custom_minimum_size = Vector2(56, 56)
-	corner.size = Vector2(56, 56)
+	corner.custom_minimum_size = Vector2(CORNER, CORNER)
+	corner.size = Vector2(CORNER, CORNER)
 	corner.mouse_filter = Control.MOUSE_FILTER_STOP
 	corner.gui_input.connect(_corner_input)
 	corner.draw.connect(_draw_corner)
@@ -41,7 +42,7 @@ func corner_rect() -> Rect2:
 
 
 func _place_corner() -> void:
-	corner.position = Vector2(get_viewport().get_visible_rect().size.x - 68, 12)
+	corner.position = Vector2(get_viewport().get_visible_rect().size.x - CORNER - 12, 10)
 
 
 func _corner_input(e: InputEvent) -> void:
@@ -65,11 +66,13 @@ func _process(delta: float) -> void:
 
 func _draw_corner() -> void:
 	var c := corner.size / 2.0
-	corner.draw_circle(c, 22, Color(1, 1, 1, 0.38))
+	var r := CORNER * 0.4
+	corner.draw_circle(c, r + 2.0, Color(INK, 0.12), true, -1.0, true)
+	corner.draw_circle(c, r, Color(1, 1, 1, 0.62), true, -1.0, true)
 	for i in 3:
-		corner.draw_circle(c + Vector2((i - 1) * 9, 0), 3, Color(INK, 0.45))
+		corner.draw_circle(c + Vector2((i - 1) * r * 0.42, 0), r * 0.13, Color(INK, 0.6), true, -1.0, true)
 	if _hold > 0.0:
-		corner.draw_arc(c, 24, -PI / 2, -PI / 2 + TAU * _hold / HOLD_SECONDS, 32, ACCENT, 4.0, true)
+		corner.draw_arc(c, r + 4.0, -PI / 2, -PI / 2 + TAU * _hold / HOLD_SECONDS, 48, ACCENT, 6.0, true)
 
 
 # ------------------------------------------------------------------ building blocks

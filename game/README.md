@@ -6,6 +6,9 @@ Godot 4.7.2, Mobile renderer, landscape or portrait, iPad first. The creatures a
 meadow (see "Live 3D foxes" below).
 
 ## What a child can do
+- **Choose a creature:** at dawn three soap bubbles float over the nest, each with a live creature inside (fox, unicorn,
+  collie). Tap one: it gives a happy hop, the other bubbles drift away, and the chosen one floats into the egg. No
+  words needed. (A facilitator can fix the kind instead, in the parent area.)
 - **Hatch the egg:** tap it (or rub across it) four times. It glows to invite a touch and wobbles if left alone.
 - **Pet the fox:** tap it. It answers with a chirp, hearts and a reaction that fits its temperament (calm, playful or curious).
 - **Walk it:** drag it, or tap anywhere on the meadow to call it over.
@@ -48,15 +51,16 @@ sleepy z's drift up before it curls up. A tap on a sleeping creature tucks it in
 tap wakes it. Everyone wakes at dawn. The sun or moon in the top-left corner switches between day and night.
 
 ## For the facilitator
-Press and hold the dots in the top-right corner, answer the grown-ups question, and the parent area opens. In it:
+Press and hold the round button with three dots in the top-right corner (about a second), answer the grown-ups question, and the parent area opens. In it:
 - the creature's name;
 - variant A or B;
 - temperament;
 - island-time speed (fast for demos);
 - music on or off;
 - **Bring the second fox now**, instead of waiting about four minutes after the hatch;
-- **Creature: fox, unicorn or collie**, for the next session (the egg hatches that kind, and the second adult and babies
-  are the same kind). The collie's traits are its dark coat and its white parts (paw buttons in the trait picker);
+- **First creature: Child picks, Fox, Unicorn or Collie**, for the next session. "Child picks" (the default) shows the
+  three bubbles at the start; a fixed kind skips them and the egg hatches that kind. The second adult and the babies are
+  the same kind. The collie's traits are its dark coat and its white parts (paw buttons in the trait picker);
 - **3D creature check and speed test**, the live creature on its own with every clip, and a speed test (see below);
 - **New session** for the next child: a new egg and a new log.
 
@@ -136,5 +140,5 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   rebuilds that page (`.github/workflows/pages.yml`).
 - **Local web build:** export the "Web" preset to `build/web`, run `python serve_web.py`, and open the printed
   address on the same Wi-Fi. Sound is off this way, because a home network serves plain http.
-- **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn]` plays through the session with simulated
+- **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn|collie]` plays through the session (choosing that kind's bubble first) with simulated
   touches and saves a screenshot at each step.
