@@ -15,7 +15,8 @@ basket_east.png. The props cast their shadows into the backdrop but are drawn se
 sorts them with the creatures). The things that move (apple.png and the things to wear in the basket, wear_crown.png,
 wear_scarf.png, wear_bow.png, ball.png) are made where they first sit, centred on their own point, without shadows,
 and with no grass round them; the things to place that stand on the grass (plant.png, lantern2.png) carry their own
-soft shadow (the ground catches it, and nothing else of the meadow shows).
+soft shadow (the ground catches it, and nothing else of the meadow shows). lantern_lit.png and lantern2_lit.png are the
+lanterns with their lamps lit, for the night.
 
 Run:  blender -b --factory-startup -P meadow3d.py -- OUT_DIR [--quick] [part ...]
       parts: backdrop tree nest egg lantern sign basket wear apple plant ball (default: all)      --quick  fewer grass blades, half size"""
@@ -388,17 +389,20 @@ def build_lanterns(spots=((372, 548), (836, 552)), first=0):
         B.add(Vp, Fp, hexc("#a88a70"))
         top = foot + np.array([0, 0, 66 * u])
         Vb, Fb = D.sphere_mesh(24, 12)                           # the frame: a rounded box, cream, with a pink roof
-        box = np.sign(Vb) * np.abs(Vb) ** 0.4 * np.array([20 * u, 20 * u, 22 * u])
-        B.add(box + top + np.array([0, 0, 20 * u]), Fb, hexc("#fff3d6"))
+        box = np.sign(Vb) * np.abs(Vb) ** 0.4 * np.array([20 * u, 20 * u, 22 * u])   # a paper shade (it glows at night)
+        glass.add(box + top + np.array([0, 0, 20 * u]), Fb, hexc("#fff3d6"))
         roof = np.sign(Vb) * np.abs(Vb) ** 0.7 * np.array([26 * u, 26 * u, 12 * u])
         roof[:, 2] = np.maximum(roof[:, 2], 0)
         B.add(roof + top + np.array([0, 0, 40 * u]), Fb, hexc("#e8a6b8"))
         Vr, Fr = Ub.tube(np.array([top + np.array([-4 * u, 0, 50 * u]), top + np.array([0, 0, 56 * u]), top + np.array([4 * u, 0, 50 * u])]), np.full(3, 1.5 * u), 8)
         B.add(Vr, Fr, hexc("#c99a6a"))
-        Vg, Fg = D.sphere_mesh(16, 8)
-        glass.add(Vg * np.array([15 * u, 15 * u, 17 * u]) + top + np.array([0, -6 * u, 20 * u]), Fg, hexc("#ffe7a8"))
+        for k in range(4):                                     # the shade's frame: thin cane ribs up its corners
+            a = np.pi / 4 + k * np.pi / 2
+            rib = np.array([top + np.array([np.cos(a) * 24.6 * u, np.sin(a) * 24.6 * u, z * u]) for z in (3, 12, 20, 28, 37)])
+            Vk, Fk = Ub.tube(rib, np.full(5, 1.3 * u), 6)
+            B.add(Vk, Fk, hexc("#c99a6a"))
         B.build("lantern%d" % i, D.principled("lanternm", rough=0.6, spec=0.3))
-        glass.build("lanternglass%d" % i, D.principled("lanternglass", color=hexc("#ffe2a0"), rough=0.3, emit=0.6))
+        glass.build("lanternglass%d" % i, D.principled("lanternglass", rough=0.5, spec=0.2))
         names.append(["lantern%d" % i, "lanternglass%d" % i])
     return names
 
@@ -924,6 +928,34 @@ def main():
                 bpy.data.objects[n].visible_shadow = False
             continue
         render_box(name, ax - ox, ay - oy, w, h, set(show[name]), hide=hide)
+    if "lantern" in PARTS:                                     # the lanterns lit, for the night (the game fades them in)
+        for ob in bpy.data.objects:
+            if ob.name.startswith("lanternglass"):
+                nt_ = ob.active_material.node_tree
+                bs = nt_.nodes["Principled BSDF"]
+                for ln in list(bs.inputs["Base Color"].links):      # lit, the paper is all lamplight (warm, not white)
+                    nt_.links.remove(ln)
+                bs.inputs["Base Color"].default_value = (0.0, 0.0, 0.0, 1.0)
+                bs.inputs["Emission Color"].default_value = (1.0, 0.74, 0.38, 1.0)
+                bs.inputs["Emission Strength"].default_value = 1.15
+                c = Vector(np.mean(np.array([v.co for v in ob.data.vertices]), 0))
+                L = bpy.data.lights.new(ob.name + "_lamp", "POINT")
+                L.energy, L.color, L.shadow_soft_size = 1.5, (1.0, 0.8, 0.5), 0.05
+                lo = bpy.data.objects.new(ob.name + "_lamp", L)
+                bpy.context.collection.objects.link(lo)
+                lo.location = c
+        for name in ("lantern", "lantern2"):
+            ax, ay, w, h, ox, oy = boxes[name]
+            hide = loose - set(show[name])
+            if name in grounded:
+                hide = {n for n in meshes if n not in show[name] and n != "land"}
+                land.is_shadow_catcher = True
+                for n in show[name]:
+                    bpy.data.objects[n].visible_shadow = True
+                render_box(name + "_lit", ax - ox, ay - oy, w, h, set(show[name]) | {"land"}, hide=hide)
+                land.is_shadow_catcher = False
+            else:
+                render_box(name + "_lit", ax - ox, ay - oy, w, h, set(show[name]), hide=hide)
 
 
 main()

@@ -127,11 +127,14 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   everything else stays. Eight coats and five glows. The baby is the adult model at about two thirds size.
 - The meadow and the pond are rendered in 3D from code with the creatures' light (`art/generators/meadow3d.py`,
   Blender): the sky, hills, grass, flowers, path and the pond (water, lily pads, bulrushes, stones) as one backdrop
-  saved as two halves (`art/meadow3d/meadow.png` and `meadow_east.png`, imported with the same high-quality
-  compression so the join doesn't show), and the tree, nest, egg, lanterns, signposts, baskets, apples and the things
+  saved as two halves (`art/meadow3d/meadow.png` and `meadow_east.png`, both imported as WebP at quality 0.9: the
+  grass is too noisy for the graphics-chip formats to pack small, so these two are about 2 MB to download instead of
+  about 19), and the tree, nest, egg, lanterns, signposts, baskets, apples and the things
   to wear and to place as their own pictures, each with the canvas and origin of the drawing it replaced, so nothing
   in the game moved. The fixed props cast their shadows into the backdrop; the plant and lantern to place carry their
   own soft shadow, and the ball gets one from the game (it spins). The game draws the ripples and glints on the water.
+  At dusk the lanterns fade over to pictures of them lit (`lantern_lit.png`, `lantern2_lit.png`, paper shades glowing
+  amber), which the night's tint is kept off, so they shine in the dark.
   The sign pictures (a drop, the tree) are still small drawings (`art/generators/meadow.py`).
 - The sounds are synthesised (`art/generators/sfx.py`).
 - The music is made from code (`art/generators/music.py`): a day tune (76 beats a minute: a warm pad, a soft bass and a

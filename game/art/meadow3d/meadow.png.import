@@ -3,23 +3,21 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://droxs4h37bclp"
-path.bptc="res://.godot/imported/meadow.png-55ba9d51ad2819a69c02973e0ddff80d.bptc.ctex"
-path.astc="res://.godot/imported/meadow.png-55ba9d51ad2819a69c02973e0ddff80d.astc.ctex"
+path="res://.godot/imported/meadow.png-55ba9d51ad2819a69c02973e0ddff80d.ctex"
 metadata={
-"imported_formats": ["s3tc_bptc", "etc2_astc"],
-"vram_texture": true
+"vram_texture": false
 }
 
 [deps]
 
 source_file="res://art/meadow3d/meadow.png"
-dest_files=["res://.godot/imported/meadow.png-55ba9d51ad2819a69c02973e0ddff80d.bptc.ctex", "res://.godot/imported/meadow.png-55ba9d51ad2819a69c02973e0ddff80d.astc.ctex"]
+dest_files=["res://.godot/imported/meadow.png-55ba9d51ad2819a69c02973e0ddff80d.ctex"]
 
 [params]
 
-compress/mode=2
+compress/mode=1
 compress/high_quality=true
-compress/lossy_quality=0.7
+compress/lossy_quality=0.9
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1

@@ -53,6 +53,7 @@ class DecorItem:
 	var sprite := Sprite2D.new()
 	var glow := Sprite2D.new()           ## the lantern's light at night
 	var shade := Sprite2D.new()          ## the ball's shadow (it stays put while the ball spins)
+	var lit := Sprite2D.new()            ## the lantern with its lamp lit
 	var _press := Vector2.ZERO
 	var _moved := false
 
@@ -69,6 +70,11 @@ class DecorItem:
 			add_child(shade)
 		add_child(sprite)
 		if id == "lantern":
+			lit.texture = load("res://art/meadow3d/lantern2_lit.png")
+			lit.centered = false
+			lit.offset = sprite.offset
+			lit.modulate.a = 0.0
+			sprite.add_child(lit)               # (so it scales, tips and sways with the lantern)
 			glow.texture = Fx.glow_texture(Color(1.0, 0.86, 0.5, 0.9), 256)
 			glow.position = Vector2(0, -86)        # the lantern's glass
 			glow.modulate.a = 0.0
@@ -178,4 +184,5 @@ class DecorItem:
 			var dark: float = basket.meadow.time.darkness() if basket.meadow and basket.meadow.time else 0.0
 			var on := dark if state != "basket" else dark * 0.5
 			glow.modulate.a = on * (0.8 + 0.08 * sin(Time.get_ticks_msec() / 1000.0 * 3.0))
+			Lantern.light_up(lit, on, basket.meadow)
 			glow.scale = Vector2.ONE * (1.4 + 0.3 * on)
