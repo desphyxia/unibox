@@ -240,3 +240,16 @@ Not in the gate (noted, not decided): response to creature needs, distress at ne
 **Paid islands** may lean toward one habitat (a coral island with a big reef, a mountain island with tall cliffs) but are never the only home of a habitat.
 
 **Prototype scope:** the scope rule allows about 2 places. Meadow (land) and pond (amphibious) are built. Sea and air are each a new place, so the next one to add is **sea**, which lets the sea-horse in.
+
+**The next creatures (planned 2026-10-24; none built yet).** The user asked for a plan for the next 10 kinds, then added the axolotl and kept all 11. Most go to the habitats that have no creature yet, and the list mixes real and magical animals, as the fox spirit and unicorn do.
+
+| Habitat | Kinds | Why |
+|---|---|---|
+| Sea | sea-horse, narwhal, sea turtle | the sea-horse's art exists and sea is the next place; the narwhal is the "unicorn of the sea"; turtle eggs hatch on the beach |
+| Air | owl, baby dragon, parrot | the owl fits night, lanterns and bedtime; a dragon is a magical flyer children love; the parrot's colours suit breeding |
+| Amphibious | frog, otter, penguin, axolotl | the frog and axolotl live at the pond; the otter plays on the shore; the penguin waddles and swims. A real axolotl never leaves the water, but it lives in the pond, the amphibious zone |
+| Land | bunny | a small, soft first pet for ages 4-6 |
+
+- **Download:** sea-horse, narwhal, sea turtle, frog, axolotl and dragon have smooth skin, not fur, so they should be smaller and quicker to build (check with `art/tools/size_report.py`).
+- **Breeding traits to keep in mind:** the axolotl's colour morphs (pink, gold, white, wild-dark) and its feathery gills; the parrot's plumage colours.
+- **Suggested order:** sea-horse, then frog, then owl, so each empty habitat gets a creature early. Not decided.
