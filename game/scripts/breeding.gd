@@ -71,7 +71,7 @@ func _arrive() -> void:
 	partner.arrived.connect(_on_walk_ended.bind(partner))
 	main.creature.arrived.connect(_on_walk_ended.bind(main.creature))
 	Log.event("second_adult", "%s,%s" % [t["coat"], t["glow"]])
-	main.get_tree().create_timer(1.2).timeout.connect(func(): Sfx.play("chirp", 0.9, 0.0, -2.0))
+	main.get_tree().create_timer(1.2).timeout.connect(func(): Sfx.play(Sfx.voiced(Game.kind, "chirp"), 0.9, 0.0, -2.0))
 
 
 func _on_walk_ended(who: Creature) -> void:
@@ -119,7 +119,7 @@ func _pair() -> void:
 	while a.turning or b.turning:
 		await main.get_tree().process_frame
 	var mid: Vector2 = (a.head_world() + b.head_world()) / 2.0
-	Sfx.play("happy", 1.0)
+	Sfx.play(Sfx.voiced(Game.kind, "happy"), 1.0)
 	Fx.hearts(main.fx, mid + Vector2(0, -10), 5, 50)
 	b.play_clip("happy", 12.0)
 	await a.play_clip("happy", 12.0)
