@@ -72,6 +72,14 @@ func knock() -> void:
 		t.tween_callback(hatch)
 
 
+func knock_hint() -> void:
+	## a little wobble on its own, to invite the first tap (after the child chose what is inside)
+	_idle = 0.0
+	var t := create_tween()
+	for a in [0.08, -0.07, 0.04, 0.0]:
+		t.tween_property(sprite, "rotation", a, 0.1).set_trans(Tween.TRANS_SINE)
+
+
 func _add_crack() -> void:
 	## a zigzag crack across the shell, a little higher each time (egg texture pixels)
 	var line := Line2D.new()
