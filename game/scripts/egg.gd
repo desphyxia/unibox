@@ -26,7 +26,7 @@ func _ready() -> void:
 	glow.texture = Fx.glow_texture(Color(1.0, 0.93, 0.7, 0.85), 256)
 	glow.position = Vector2(0, -72)
 	add_child(glow)
-	sprite.texture = load("res://art/meadow/egg.svg")
+	sprite.texture = load("res://art/meadow3d/egg.png")
 	sprite.centered = false
 	sprite.scale = Vector2.ONE * 0.5
 	sprite.offset = Vector2(-120, -292)     # texture is drawn at 2x: bottom centre is the origin
@@ -70,6 +70,14 @@ func knock() -> void:
 		_add_crack()
 	if taps >= TAPS_TO_HATCH:
 		t.tween_callback(hatch)
+
+
+func knock_hint() -> void:
+	## a little wobble on its own, to invite the first tap (after the child chose what is inside)
+	_idle = 0.0
+	var t := create_tween()
+	for a in [0.08, -0.07, 0.04, 0.0]:
+		t.tween_property(sprite, "rotation", a, 0.1).set_trans(Tween.TRANS_SINE)
 
 
 func _add_crack() -> void:

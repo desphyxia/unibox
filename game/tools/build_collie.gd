@@ -66,7 +66,15 @@ func _initialize() -> void:
 			table["c0"].append_array([v[o + 13], v[o + 14], out, v[o + 11]])
 			table["c1"].append_array([0.0, v[o + 10], {"lit": 0.0, "gloss": 1.0, "emit": 2.0}[cls], (comb - nr * out).length()])
 			table["c2"].append_array([p.x, p.y, p.z, 0.0])
-			table["c3"].append_array([v[o + 12], 0.0, 0.0, 0.0])        # which trait recolours it: 1 the dark coat, 2 the white
+			# which trait recolours it (1 the dark coat, 2 the white), and
+			# the way the long hair is combed along the surface, for the fur shader's long strands and locks (none on the
+			# head's short fur, that moves with the head, jaw or an ear)
+			var along := comb - nr * out
+			var on_head := false
+			for k in 4:
+				if v[o + 22 + k] > 0.5 and bones[int(v[o + 18 + k] + 0.5)]["name"] in ["head", "jaw", "ear_0", "ear_1"]:
+					on_head = true
+			table["c3"].append_array([v[o + 12], _packed_direction(along) if along.length() > 1e-4 and not on_head else -1.0, 0.0, 0.0])
 			for k in 4:
 				table["bones"].append(int(v[o + 18 + k] + 0.5))
 				table["weights"].append(v[o + 22 + k])
@@ -91,10 +99,22 @@ func _initialize() -> void:
 		"shadows": {"sit": [Vector2(14, 200), Vector2(-14, 200)], "stand": [Vector2(14, 200), Vector2(-14, 200)],
 			"sleep": [Vector2(8, 230), Vector2(-8, 230)]},
 		"walk": {"stride": 70.0, "stance": STANCE}, "eat_drop": Vector2(10, 60), "touch": Vector2(175, 230),
-		"fur": {"root_shade": 0.9, "strand_freq": 150.0, "tuft_freq": 18.0},
+		"fur": {"root_shade": 0.95, "strand_freq": 230.0, "tuft_freq": 26.0, "sheen": 0.5, "sheen_rough": 0.42,
+			"streak": 12.0, "lock_streak": 5.0, "lock_shade": 0.3, "strand_light": 0.18, "silk": 2.5, "silk_sharp": 6.0},
 		"blanket": Vector3(60, 230, 90)})
 	print("saved %s (%s), %d KB" % [OUT, error_string(err), FileAccess.get_file_as_bytes(OUT).size() / 1024])
 	quit()
+
+
+static func _packed_direction(d: Vector3) -> float:
+	## a direction in one number (as the fur shader unpacks it): folded onto an octahedron, 256 steps each way
+	d /= absf(d.x) + absf(d.y) + absf(d.z)
+	var x := d.x
+	var y := d.y
+	if d.z < 0.0:
+		x = (1.0 - absf(d.y)) * (1.0 if d.x >= 0.0 else -1.0)
+		y = (1.0 - absf(d.x)) * (1.0 if d.y >= 0.0 else -1.0)
+	return roundf((x * 0.5 + 0.5) * 255.0) * 256.0 + roundf((y * 0.5 + 0.5) * 255.0)
 
 
 static func _v(a) -> Vector3:
@@ -176,8 +196,10 @@ func _lying(f: Dictionary, sit: float, down: float, rest: float) -> void:
 	_add(f, "neck_1", _r(ACROSS, -0.42 * rest))
 	_add(f, "head", _r(ACROSS, 0.42 * rest) * _r(Vector3.RIGHT, 0.08 * rest))
 	_jaw(f, 0.9 * rest)
-	_add(f, "ear_0", _r(Vector3.RIGHT, 0.25 * rest))
-	_add(f, "ear_1", _r(Vector3.RIGHT, -0.25 * rest))
+	# the ears fold back flat over the head (left upright, whichever ear was further from the camera stood out past the
+	# lowered face); ear_0 is the one on the near side when the dog faces right, ear_1 the other
+	_add(f, "ear_0", _r(ACROSS, 1.8 * rest) * _r(Vector3.RIGHT, -0.5 * rest))
+	_add(f, "ear_1", _r(ACROSS, 2.8 * rest) * _r(Vector3.RIGHT, 1.2 * rest))
 	var lift := float(meta.get("tail_lie", 0.6))       # the tail lifts to lie along the ground behind, and curls round
 	for t in 4:
 		_add(f, "tail_%d" % t, _r(Vector3.UP, -0.35 * rest) * _r(ACROSS, (-0.9 if t == 0 else -0.15) * maxf(sit, down) * lift))
@@ -286,7 +308,12 @@ func _frame(tm: float, name: String) -> Dictionary:
 		"turn", "turn_stand":
 			var e := u * u * u * (u * (6.0 * u - 15.0) + 10.0)
 			var mid := pow(sin(PI * u), 2.0)
-			_add(f, "root", _r(Vector3.UP, -deg_to_rad(TURN_DEG) * e * sg))
+			var spin := _r(Vector3.UP, -deg_to_rad(TURN_DEG) * e * sg)
+			_add(f, "root", spin)
+			# round the model's own middle, as the game turns it once the clip ends (the root bone need not sit there:
+			# the collie's is 0.58 back, and turning round it made the dog jump sideways at the end)
+			var pivot: Vector3 = bones[bone["root"]]["rest"].origin
+			f["move"]["root"] = spin * pivot - pivot
 			f["move"]["body"] = Vector3(0, 0.08 * mid, 0)
 			_add(f, "head", _r(Vector3.UP, -sg * 0.15 * sin(TAU * u)))
 			_wag(f, TAU * u, sg * 0.2)

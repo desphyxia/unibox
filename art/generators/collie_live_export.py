@@ -34,7 +34,10 @@ SCALE = 2.9                                                   # the game's colli
 SHIFT = np.array([0.2, 0.0, 0.0])                             # the dog's middle over the ground point
 HEAD_TRIS, COAT_TRIS = 7000, 15000                            # the meshes are simplified to these
 GUIDES = 9000                                                 # guide strands for the coat's bulk
-BLACK_FUR = D.hexc("#1d212c")                                 # a blue-black, as in the painting
+BLACK_FUR = D.hexc(os.environ.get("COLLIE_BLACK", "#2b3449"))  # the painting's "black" is a soft navy (its middle
+                                                              # tone about #283345); the game's light darkens it
+DARK_TIP = float(os.environ.get("COLLIE_TIP", "0.18"))         # the dark fur's tips lighter, blue-grey, where light catches
+FORM = float(os.environ.get("COLLIE_FORM", "0.6"))           # how much the shape's ridges lighten and grooves darken
 WHITE_FUR = D.hexc("#eeeae1")
 rng = np.random.default_rng(11)
 log = D.log
@@ -129,6 +132,10 @@ def build_head():
 
 # ================================================================== the coat: the body's skin wrapped in the hair's bulk
 KIND_R = {0: (0.014, 0.009), 1: (0.026, 0.013), 3: (0.014, 0.008), 4: (0.024, 0.012), 9: (0.014, 0.008)}   # root, tip
+TIP = float(os.environ.get("COAT_TIP", "0.3"))                 # the tips' thickness, as a share of the above: the locks
+                                                              # end in points, as the coat's fringes do in the render
+BLURS = int(os.environ.get("COAT_BLURS", "1"))                 # how much the locks melt into one another and the body
+MELT = float(os.environ.get("COAT_MELT", "0.012"))
 KIND_LEN = {0: 0.8, 1: 1.0, 3: 0.6, 4: 1.0}                   # the bulk a little shorter than the hair (it lies flatter)
 
 
@@ -174,6 +181,7 @@ def splat(Pg, kind, lo, shape, h):
     n, K = Pg.shape[:2]
     for i in range(n):
         r0, r1 = KIND_R[int(kind[i])]
+        r1 = r1 * TIP
         rad = r0 + (r1 - r0) * np.linspace(0, 1, K)
         for k in range(K - 1):
             a, b, ra, rb = Pg[i, k], Pg[i, k + 1], rad[k], rad[k + 1]
@@ -218,8 +226,8 @@ def build_coat():
     Q = np.stack([X.ravel(), Y.ravel(), Z.ravel()], 1)
     Fb = D.body_sdf(Q).reshape(shape).astype(np.float32)
     Fh = head_world_sdf(Q).reshape(shape).astype(np.float32)
-    F = smin(Fb, Fe, 0.025)
-    for _ in range(3):
+    F = smin(Fb, Fe, MELT)
+    for _ in range(BLURS):
         F = blur(F)
     F = np.maximum(F, -(Fh + 0.012))                          # hollow inside the head: the head has its own mesh
     check_box(F)
@@ -268,6 +276,49 @@ def build_closed_eyes():
         pts = c + unit(pts - c) * D.EYE_R * 1.1
         Vt, Ft = D.Ub.tube(pts, np.full(len(pts), 0.0022), 6)
         D.mesh("lineclosed", D.to_world(Vt), np.array(Ft), np.tile(D.hexc("#050407"), (len(Vt), 1)), None)
+
+
+# ================================================================== the eyes for the game: a bright amber iris that glows a little
+IRIS_DEG = 62.0                                               # the iris' size (degrees from the eye's axis): it fills the opening
+CAM_AZ, CAM_PITCH = math.radians(40.0), math.radians(9.0)     # the game's camera (meta "camera" below), more from the side
+GAME_CAM = np.array([math.sin(CAM_AZ) * math.cos(CAM_PITCH), math.cos(CAM_AZ) * math.cos(CAM_PITCH), math.sin(CAM_PITCH)])
+
+
+def build_game_eyeballs():
+    """the eyeballs again, painted for the game's size and light: a warm amber iris, lighter below, a dark rim, a smaller
+    pupil; the iris glows a little (emission per point) so it reads brown, not as a dark ball reflecting the sky"""
+    for ob in list(bpy.data.objects):
+        if ob.type == "MESH" and ob.name.split(".")[0] in ("eyeball", "catchlight"):
+            bpy.data.objects.remove(ob)
+    for side in (1, -1):
+        E, n, u, v = D.EYES[side]
+        to_cam = unit(GAME_CAM @ D.HEAD_R)                    # toward the game's camera, in the head's frame
+        look = unit(n * 0.35 + to_cam * 0.65 - v * 0.2)
+        c = E - n * D.EYE_R * 0.88
+        upv = unit(v - look * (v @ look))
+        a = np.cross(upv, look)
+        S, F = D.sphere_mesh(64, 32)
+        Rm = np.stack([a, upv, look], 1)
+        Vb = c + (S * D.EYE_R) @ Rm.T
+        ang = np.degrees(np.arccos(np.clip(S[:, 2], -1, 1)))
+        r = ang / IRIS_DEG
+        iris = D.mix(D.hexc("#c27232"), D.hexc("#7a3a14"), D.smooth(0.45, 1.0, r)[:, None])
+        iris = D.mix(iris, D.hexc("#dc9448"), (D.smooth(0.1, -0.7, S[:, 1]) * D.smooth(1.0, 0.55, r) * 0.55)[:, None])
+        iris = D.mix(iris, D.hexc("#5a2a0c"), (D.smooth(0.88, 1.0, r) * 0.8)[:, None])          # a dark rim
+        iris = D.mix(iris, D.hexc("#7a3c14"), (D.smooth(-0.1, 0.7, S[:, 1]) * 0.35)[:, None])   # the lid's shadow above
+        col = np.where((r < 1.0)[:, None], iris, D.hexc("#2e1c12"))
+        pupil = D.smooth(0.44, 0.38, r)
+        col = D.mix(col, D.hexc("#060404"), pupil[:, None])
+        glow = np.where(r < 1.0, 0.38 * (1 - pupil) * D.smooth(1.02, 0.85, r), 0.0)
+        D.mesh("eyeball", D.to_world(Vb), F, col, None, attrs={"emit": glow})
+        gdir = unit(look + upv * 0.45 - a * 0.25)              # the catchlight, high on the iris toward the light
+        gc = c + gdir * D.EYE_R * 1.02
+        ga = unit(np.cross(gdir, upv))
+        gb = np.cross(ga, gdir)
+        ring = [gc + (ga * np.cos(t) + gb * np.sin(t)) * D.EYE_R * 0.17 for t in np.linspace(0, 2 * np.pi, 20, endpoint=False)]
+        Vg = np.array([gc + gdir * 0.0004] + ring)
+        D.mesh("catchlight", D.to_world(Vg), np.array([(0, k + 1, (k + 1) % 20 + 1) for k in range(20)]),
+               np.ones((21, 3)), None)
 
 
 # ================================================================== the skeleton (Blender axes here; written in Godot's)
@@ -374,6 +425,7 @@ D.setup()
 _sphere = D.sphere_mesh
 D.sphere_mesh = lambda nu, nv: _sphere(min(nu, 48), min(nv, 24))   # game-density eyes
 D.build_eyes()
+build_game_eyeballs()
 build_closed_eyes()
 D.build_nose()
 D.build_mouth()
@@ -390,6 +442,7 @@ EMIT = {"catchlight": 2.0}
 BLINK = {"eyeball": 1, "catchlight": 1, "lidrim": 1, "lidclosed": 2, "lineclosed": 2}
 groups = {"lit": [], "gloss": [], "emit": []}
 counts = {}
+EMIT_V = {}                                                   # a part's own emission per point, by its vertex array
 
 
 def add(name, V, T, C, N, wd, fur_len, comb, tip, trait, lift=0.4, droop=0.15):
@@ -403,10 +456,47 @@ def add(name, V, T, C, N, wd, fur_len, comb, tip, trait, lift=0.4, droop=0.15):
     cg = unit(cg - Ng * np.sum(cg * Ng, 1, keepdims=True) * 0.85) * (fur_len * SCALE)[:, None]
     L = fur_len * SCALE
     cls = "emit" if name in EMIT else ("gloss" if name in GLOSS else "lit")
-    rows = np.column_stack([Vg, Ng, C, np.where(fur_len > 0, tip, 0.0), np.full(n, EMIT.get(name, 0.0)),
+    em = EMIT_V.pop(id(V), None)
+    rows = np.column_stack([Vg, Ng, C, np.where(fur_len > 0, tip, 0.0), em if em is not None else np.full(n, EMIT.get(name, 0.0)),
                             np.full(n, BLINK.get(name, 0)), trait, L * lift, L * droop, cg, B, W]).astype(np.float32)
     groups[cls].append((rows, T))
     counts[name] = counts.get(name, 0) + len(T)
+
+
+def form_shade(V, T, amount, smooth_steps=3):
+    """a colour factor from the shape: above 1 on ridges (the tops of locks and folds), below 1 in grooves between them"""
+    n = len(V)
+    S = np.zeros((n, 3))
+    cnt = np.zeros(n)
+    for a, b in ((0, 1), (1, 2), (2, 0)):
+        np.add.at(S, T[:, a], V[T[:, b]])
+        np.add.at(S, T[:, b], V[T[:, a]])
+        np.add.at(cnt, T[:, a], 1)
+        np.add.at(cnt, T[:, b], 1)
+    fn = np.cross(V[T[:, 1]] - V[T[:, 0]], V[T[:, 2]] - V[T[:, 0]])
+    N = np.zeros_like(V)
+    for k in range(3):
+        np.add.at(N, T[:, k], fn)
+    N = unit(N)
+    lap = S / np.maximum(cnt, 1)[:, None] - V                 # toward the neighbours' middle
+    c = -np.sum(lap * N, 1)                                   # + on a ridge, - in a groove
+    for _ in range(smooth_steps):                             # soften it over the neighbours
+        Sc = np.zeros(n)
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            np.add.at(Sc, T[:, a], c[T[:, b]])
+            np.add.at(Sc, T[:, b], c[T[:, a]])
+        c = 0.5 * c + 0.5 * Sc / np.maximum(cnt, 1)
+    c = c / max(np.percentile(np.abs(c), 90), 1e-9)
+    return 1.0 + amount * np.tanh(c)
+
+
+TOP = float(os.environ.get("COLLIE_TOP", "0.55"))             # the dark coat lighter where it faces the light
+KEY = unit(np.array([0.45, 0.35, 1.0]))                         # from above, a little in front and on the near side
+
+
+def top_light(N, amount):
+    """a soft light baked into the dark fur, as the painting's blue-grey on the neck, shoulder and back"""
+    return 1.0 + amount * D.smooth(-0.2, 0.95, N @ KEY)
 
 
 def dark_or_white(C):
@@ -431,8 +521,16 @@ furry = np.linalg.norm(Ch[:, :3] - plain, axis=1) < 0.01
 Ch = np.where(furry[:, None], BLACK_FUR[None, :3] * (1 - wsm)[:, None] + WHITE_FUR[None, :3] * wsm[:, None], Ch[:, :3])
 lnh, _, combh, _ = D.head_groom(Lh)
 furh = np.where(D.lip_mask(Lh) | (D.nose_body(Lh) < 0.003), 0.0, np.clip(lnh * D.HS * 0.45, 0.003, 0.012))
+for s_ in (1, -1):                                            # no fur over the eyes: none in the socket, thin at the lids
+    E_, n_, u_, v_ = D.EYES[s_]
+    q_ = Lh - E_
+    rim = D.almond(q_ @ u_, q_ @ v_)
+    furh *= np.where(np.abs(q_ @ n_) < 0.045, D.smooth(0.006, 0.022, rim), 1.0)
 wj = jaw_share(Lh)
-add("head", Vh, Th, Ch, Nh, {"head": 1.0 - wj, "jaw": wj}, furh, D.hdir(combh), 0.12, dark_or_white(Ch), lift=0.3, droop=0.1)
+trh = dark_or_white(Ch)
+Ch = Ch * np.where(trh == 1.0, form_shade(Vh, Th, FORM * 0.5) * top_light(Nh, TOP * 0.6), 1.0)[:, None]
+tiph = np.where(trh == 1.0, DARK_TIP, 0.12)
+add("head", Vh, Th, Ch, Nh, {"head": 1.0 - wj, "jaw": wj}, furh, D.hdir(combh), tiph, trh, lift=0.3, droop=0.1)
 
 # the coat
 Vc, Tc = coat["V"], coat["T"]
@@ -459,7 +557,10 @@ for k in set(wroot) | set(wbare):
     wd[k] = np.where(coat["near"], a, b)
 combc = np.where(coat["near"][:, None], coat["sdir"], np.array([-1.0, 0.0, -0.4]))
 furc = np.where(coat["near"], 0.014, 0.007)
-add("coat", Vc, Tc, Cc, Nc, wd, furc, combc, 0.15, np.where(wc > 0.5, 2.0, 1.0), lift=0.35, droop=0.2)
+shade = form_shade(Vc, Tc, FORM) * top_light(Nc, TOP)
+Cc = Cc * np.where(wc > 0.5, 1.0 + (form_shade(Vc, Tc, FORM) - 1.0) * 0.35, shade)[:, None]   # the white: shape only
+add("coat", Vc, Tc, Cc, Nc, wd, furc, combc, np.where(wc > 0.5, 0.15, DARK_TIP), np.where(wc > 0.5, 2.0, 1.0),
+    lift=0.35, droop=0.2)
 
 # the face's parts and the ears
 for ob in list(bpy.data.objects):
@@ -472,6 +573,11 @@ for ob in list(bpy.data.objects):
     V = np.asarray(V)
     if len(T) == 0:
         continue
+    ea = ob.data.attributes.get("emit")
+    if ea is not None:                                        # the irises' glow (the same points, in the same order)
+        em = np.empty(len(ea.data), np.float32)
+        ea.data.foreach_get("value", em)
+        EMIT_V[id(V)] = em.astype(np.float64)
     cap = {"nose": 1600, "ear": 1800}.get(name)
     if cap and len(T) > cap:                                  # simplified, keeping colours by the nearest old point
         V2, T2 = simplified(V, T, cap)
@@ -491,11 +597,11 @@ for ob in list(bpy.data.objects):
     if name == "ear":
         i = 0 if V.mean(0)[1] > 0 else 1
         C = np.where((C.mean(1) < 0.03)[:, None], BLACK_FUR[None, :3], C)
-        add(name, V, T, C, N, {"ear_%d" % i: np.ones(n)}, np.full(n, 0.006), np.tile([0.0, 0.0, 1.0], (n, 1)), 0.1,
+        C = np.where(np.arange(n)[:, None] < n // 2, C * 0.7, C)        # the inside of the ear a little darker
+        add(name, V, T, C, N, {"ear_%d" % i: np.ones(n)}, np.full(n, 0.006), np.tile([0.0, 0.0, 1.0], (n, 1)), DARK_TIP,
             np.ones(n), lift=0.3, droop=0.0)
-    elif name == "lidclosed":
-        add(name, V, T, C, N, {"head": np.ones(n)}, np.full(n, 0.004), np.tile([-1.0, 0.0, -0.3], (n, 1)), 0.1,
-            np.ones(n))
+    elif name == "lidclosed":                                 # no fur: the fur layers don't hide with a blink
+        add(name, V, T, C, N, {"head": np.ones(n)}, np.zeros(n), np.tile([-1.0, 0.0, -0.3], (n, 1)), 0.0, np.ones(n))
     elif name == "tongue":
         add(name, V, T, C, N, {"jaw": np.ones(n)}, np.zeros(n), np.tile([1.0, 0.0, 0.0], (n, 1)), 0.0, np.zeros(n))
     else:
@@ -527,7 +633,7 @@ tail_axis = gd(D.TAIL[int(0.47 * (len(D.TAIL) - 1))] - D.TAIL[int(0.33 * (len(D.
 feet = min(float(np.min(p[0][:, 1])) for cls in groups for p in groups[cls])
 meta.update({
     "attr": ["pos3", "nrm3", "col3", "tip", "emit", "blink", "trait", "lift", "droop", "comb3", "bones4", "weights4"],
-    "camera": {"center": [0.0, 2.6, 0.0], "azimuth": 40.0, "pitch": 9.0, "ortho": 8.0},
+    "camera": {"center": [0.0, 2.6, 0.0], "azimuth": math.degrees(CAM_AZ), "pitch": math.degrees(CAM_PITCH), "ortho": 8.0},
     "ground": [0.0, round(feet, 4), 0.0],
     "places": {"head": {"bone": "head", "at": g(top).tolist(), "size": 0.3 * SCALE},
                "mouth": {"bone": "head", "at": g(mouth).tolist(), "size": 0.1},
@@ -576,14 +682,15 @@ if PREVIEW:
     sc.world = bpy.data.worlds.new("w")
     sc.world.use_nodes = True
     sc.world.node_tree.nodes["Background"].inputs["Strength"].default_value = 0.8
-    for vname, az, el in (("side", 0.0, 4.0), ("three", 40.0, 9.0), ("face", 30.0, 6.0)):
+    for vname, az, el in (("side", 0.0, 4.0), ("three", 40.0, 9.0), ("face", 30.0, 6.0), ("eye", 40.0, 9.0)):
         cam = bpy.data.cameras.new("c")
         cam.type = "ORTHO"
-        cam.ortho_scale = 7.0 if vname != "face" else 3.0
+        cam.ortho_scale = {"face": 3.0, "eye": 0.9}.get(vname, 7.0)
         co = bpy.data.objects.new("c", cam)
         bpy.context.collection.objects.link(co)
         a, e = math.radians(az), math.radians(el)
-        tgt = np.array([0.0, 0.0, 2.6]) if vname != "face" else g(D.to_world(np.array([0.05, 0, 0])))[[0, 2, 1]]
+        tgt = {"face": g(D.to_world(np.array([0.05, 0, 0])))[[0, 2, 1]],
+               "eye": g(D.to_world(D.EYES[1][0]))[[0, 2, 1]]}.get(vname, np.array([0.0, 0.0, 2.6]))
         pos = tgt + np.array([math.sin(a) * math.cos(e), math.cos(a) * math.cos(e), math.sin(e)]) * 20
         from mathutils import Vector
         co.location = Vector(pos)

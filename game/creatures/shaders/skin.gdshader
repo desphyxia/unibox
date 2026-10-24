@@ -1,6 +1,7 @@
 shader_type spatial;
 // A creature's skin, eyes, ribbon and glowing parts (and the skin under its fur). Each vertex says which surface it is
-// (CUSTOM1.z): 0 lit (vertex colour), 1 glossy, 2 glowing. The trait colours are worked out per vertex.
+// (CUSTOM1.z): 0 lit (vertex colour), 1 glossy, 2 glowing; a lit or glossy part can glow a little too (CUSTOM1.y, such
+// as the collie's irises). The trait colours are worked out per vertex.
 render_mode diffuse_lambert_wrap, specular_schlick_ggx, cull_disabled;   // some decals face inward, as in Blender
 #include "res://creatures/shaders/creature.gdshaderinc"
 
@@ -24,7 +25,7 @@ void fragment() {
 	SPECULAR = glossy ? 0.8 : 0.25;
 	RIM = 0.1;
 	RIM_TINT = 0.6;
-	if (surf > 1.5) {
+	if (surf > 1.5 || emit > 0.0) {
 		EMISSION = col * emit;
 	}
 }

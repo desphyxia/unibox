@@ -6,6 +6,9 @@ Godot 4.7.2, Mobile renderer, landscape or portrait, iPad first. The creatures a
 meadow (see "Live 3D foxes" below).
 
 ## What a child can do
+- **Choose a creature:** at dawn three soap bubbles float over the nest, each with a live creature inside (fox, unicorn,
+  collie). Tap one: it gives a happy hop, the other bubbles drift away, and the chosen one floats into the egg. No
+  words needed. (A facilitator can fix the kind instead, in the parent area.)
 - **Hatch the egg:** tap it (or rub across it) four times. It glows to invite a touch and wobbles if left alone.
 - **Pet the fox:** tap it. It answers with a chirp, hearts and a reaction that fits its temperament (calm, playful or curious).
 - **Walk it:** drag it, or tap anywhere on the meadow to call it over.
@@ -48,15 +51,16 @@ sleepy z's drift up before it curls up. A tap on a sleeping creature tucks it in
 tap wakes it. Everyone wakes at dawn. The sun or moon in the top-left corner switches between day and night.
 
 ## For the facilitator
-Press and hold the dots in the top-right corner, answer the grown-ups question, and the parent area opens. In it:
+Press and hold the round button with three dots in the top-right corner (about a second), answer the grown-ups question, and the parent area opens. In it:
 - the creature's name;
 - variant A or B;
 - temperament;
 - island-time speed (fast for demos);
 - music on or off;
 - **Bring the second fox now**, instead of waiting about four minutes after the hatch;
-- **Creature: fox or unicorn**, for the next session (the egg hatches that kind, and the second adult and babies are
-  the same kind);
+- **First creature: Child picks, Fox, Unicorn or Collie**, for the next session. "Child picks" (the default) shows the
+  three bubbles at the start; a fixed kind skips them and the egg hatches that kind. The second adult and the babies are
+  the same kind. The collie's traits are its dark coat and its white parts (paw buttons in the trait picker);
 - **3D creature check and speed test**, the live creature on its own with every clip, and a speed test (see below);
 - **New session** for the next child: a new egg and a new log.
 
@@ -76,7 +80,9 @@ clip. Things to wear (`scripts/wardrobe.gd`, made in code) sit at places the bui
 head, the ribbon round the neck and a tail near its tip, each carried by its bone and placed for every pose. Fur is shell fur: the furry skin plus 6 thin copies
 of it (4 for babies) stacked in one mesh and lifted along the fur when the game starts, so the skeleton carries them
 (the web renderer gives shaders no tangents, so the fur can't be grown in the shader), with holes cut by a small stored
-noise texture (`creatures/shaders/`). Coat
+noise texture (`creatures/shaders/`). The collie's long hair is drawn along the way it is combed (packed into each point
+by `tools/build_collie.gd`): the noise is averaged along the hair, so strands are streaks and tufts are locks with
+darker gaps, and a hair highlight runs across the locks; the fox and unicorn keep round strands. Coat
 and glow colours are worked out by the shaders, so a new colour costs no download. The fox is about 1.1 MB to download.
 
 **The unicorn** (`creatures/unicorn/unicorn.scn`, about 1.3 MB) is the new one built from scratch
@@ -121,10 +127,22 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   squash hides it.
 - Trait colours (values in `scripts/traits.gd`): the coat's apricot band and the bright foxfire band get new colours,
   everything else stays. Eight coats and five glows. The baby is the adult model at about two thirds size.
-- The meadow and pond art is drawn from code (`art/generators/meadow.py`; the two places' backdrop is one drawing
-  saved as two halves, `meadow.svg` and `meadow_east.svg`, imported with the same high-quality compression so the
-  join doesn't show).
-- The sounds are synthesised (`art/generators/sfx.py`).
+- The meadow and the pond are rendered in 3D from code with the creatures' light (`art/generators/meadow3d.py`,
+  Blender): the sky, hills, grass, flowers, path and the pond (water, lily pads, bulrushes, stones) as one backdrop
+  saved as two halves (`art/meadow3d/meadow.png` and `meadow_east.png`, both imported as WebP at quality 0.9: the
+  grass is too noisy for the graphics-chip formats to pack small, so these two are about 2 MB to download instead of
+  about 19), and the tree, nest, egg, lanterns, signposts, baskets, apples and the things
+  to wear and to place as their own pictures, each with the canvas and origin of the drawing it replaced, so nothing
+  in the game moved. The fixed props cast their shadows into the backdrop; the plant and lantern to place carry their
+  own soft shadow, and the ball gets one from the game (it spins). The game draws the ripples and glints on the water.
+  At dusk the lanterns fade over to pictures of them lit (`lantern_lit.png`, `lantern2_lit.png`, paper shades glowing
+  amber), which the night's tint is kept off, so they shine in the dark.
+  The signposts' pictures (a drop of water, a little apple tree; `icon_water.png`, `icon_tree.png`) are rendered the
+  same way, without shadows, as they bob on the boards. Only the heart, sparkle and paw are still drawings
+  (`art/generators/meadow.py`).
+- The sounds are synthesised (`art/generators/sfx.py`). The collie has its own voice (`sfx/collie_*.wav`: a soft
+  "wuf" for the chirp, little yips, happy yips with a pant, a sigh through the nose, a squeaky yawn); a creature plays
+  its kind's own version of a sound where there is one (`Sfx.voiced`), else the shared one.
 - The music is made from code (`art/generators/music.py`): a day tune (76 beats a minute: a warm pad, a soft bass and a
   music-box melody over Fmaj7, Dm7, Bbmaj7, Csus4, Fmaj7, Am7, Bbmaj7, C7) and a slower, lower night lullaby on the
   same chords, each a seamless loop of 16 bars. `scripts/music.gd` plays both and crossfades them with island time (the
@@ -136,5 +154,7 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   rebuilds that page (`.github/workflows/pages.yml`).
 - **Local web build:** export the "Web" preset to `build/web`, run `python serve_web.py`, and open the printed
   address on the same Wi-Fi. Sound is off this way, because a home network serves plain http.
-- **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn]` plays through the session with simulated
-  touches and saves a screenshot at each step.
+- **Automated check:** `godot --path . res://tests/autoplay.tscn -- OUT_DIR [fox|unicorn|collie]` plays through the session (choosing that kind's bubble first) with simulated
+  touches and saves a screenshot at each step. `godot --path . res://tests/turn_check.tscn -- [fox|unicorn|collie]`
+  turns a creature round sitting and standing and prints how far its picture moves each frame, so a jump when a turn
+  ends shows up as one big step.

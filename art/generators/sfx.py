@@ -1,6 +1,6 @@
 """Stand-in sound effects for the playable prototype, synthesised from code (no recordings): creature chirps, egg knocks
-and cracks, a hatch chime, pick-up and drop pops, munching, a sigh, sparkles, water (splash, slurp, bloop), a yawn and soft rain. Soft and
-short, for small ears.
+and cracks, a hatch chime, pick-up and drop pops, munching, a sigh, sparkles, water (splash, slurp, bloop), a yawn and soft rain,
+and the collie's own voice (collie_*: a soft "wuf", yips, a happy pant, a sigh, a squeaky yawn). Soft and short, for small ears.
 Usage: python sfx.py OUT_DIR"""
 import os, sys, wave
 import numpy as np
@@ -131,3 +131,88 @@ with wave.open(os.path.join(OUT, "rain.wav"), "wb") as w:   # no fade at the end
     w.setnchannels(1), w.setsampwidth(2), w.setframerate(SR)
     w.writeframes((x * 32767).astype(np.int16).tobytes())
 print("wrote rain", f"{len(x) / SR:.2f}s")
+
+
+# ------------------------------------------------------------------ the collie's own voice (collie_*: the game plays a
+# kind's own sound where it has one, else the shared one). A voice is a buzz (a tone with many harmonics) shaped by the
+# mouth's resonances, plus breath; soft and short like the chirps: a gentle "wuf" when called, a little yip, happy yips
+# with a pant, a dog's sigh through the nose, and a squeaky yawn.
+drng = np.random.default_rng(36)                          # (its own seed, so the sounds above come out unchanged)
+
+
+def track(points, d):
+    """a value over time from (seconds, value) points"""
+    x = t(d)
+    p = np.array(points, float)
+    return np.interp(x, p[:, 0], p[:, 1])
+
+
+def resonate(x, f, bw):
+    """a two-pole resonance at frequency f (a number or a track) with bandwidth bw, normalised to unit peak gain"""
+    f = np.broadcast_to(np.asarray(f, float), x.shape)
+    r = np.exp(-np.pi * bw / SR)
+    a1 = 2 * r * np.cos(2 * np.pi * f / SR)
+    a2 = -r * r
+    g = 1 - r
+    y = np.zeros_like(x)
+    y1 = y2 = 0.0
+    for i in range(len(x)):
+        v = g * x[i] + a1[i] * y1 + a2 * y2
+        y[i] = v
+        y2, y1 = y1, v
+    return y
+
+
+def buzz(f0):
+    """a voiced source following the pitch track f0: harmonics falling off softly, up to about 4 kHz"""
+    ph = 2 * np.pi * np.cumsum(f0) / SR
+    out = np.zeros_like(f0)
+    for k in range(1, 24):
+        out += np.where(f0 * k < 4000, np.sin(ph * k) / k ** 1.1, 0.0)
+    return out
+
+
+def vocal(d, f0, formants, breath=0.15, voiced=1.0):
+    """d seconds of voice: f0 a pitch track, formants [(frequency or track, bandwidth, level)], breath the share of
+    noise"""
+    src = buzz(f0) * voiced + lowpass(drng.standard_normal(len(f0)), 0.5) * breath
+    return sum(lvl * resonate(src, f, bw) for f, bw, lvl in formants)
+
+
+def wuf(d=0.2, lift=1.0):
+    """a soft, closed-mouth bark: a quick rise then a fall in pitch, round and low"""
+    f0 = track([(0, 380 * lift), (0.03, 450 * lift), (d, 290 * lift)], d)
+    v = vocal(d, f0, [(track([(0, 700), (d, 480)], d), 160, 1.0), (track([(0, 1200), (d, 900)], d), 220, 0.5),
+                      (2500, 400, 0.12)], breath=0.25)
+    return lowpass(v, 0.35) * env(len(v), 0.008, d * 0.85, 1.6)
+
+
+def yip(d=0.085, f=800):
+    """a little high yip: up and down"""
+    f0 = track([(0, f * 0.9), (d * 0.35, f * 1.3), (d, f * 0.95)], d)
+    v = vocal(d, f0, [(950, 180, 1.0), (1900, 260, 0.55), (3000, 400, 0.15)], breath=0.12)
+    return lowpass(v, 0.5) * env(len(v), 0.005, d * 0.8, 1.6)
+
+
+def pant(d=0.075):
+    """one breath of a happy pant: a whispered "hah" """
+    n = drng.standard_normal(int(SR * d))
+    v = resonate(n, 950, 250) + 0.6 * resonate(n, 1600, 350) + 0.2 * resonate(n, 2600, 500)
+    return v * env(len(v), 0.012, d * 0.7, 1.4)
+
+
+save("collie_chirp", wuf(), 0.42)
+save("collie_chirp2", mix((0, yip(0.085, 780)), (0.12, yip(0.09, 860))), 0.6)
+save("collie_happy", mix((0, yip(0.08, 760)), (0.1, yip(0.08, 860)), (0.2, yip(0.09, 960)),
+                         *[(0.42 + 0.15 * i, pant() * (0.55 - 0.08 * i)) for i in range(4)]), 0.6)
+d = 0.85                                                  # a sigh: a tiny whimper, then a long breath out of the nose
+whim = vocal(0.2, track([(0, 520), (0.2, 430)], 0.2), [(600, 150, 1.0), (1300, 250, 0.3)], breath=0.1)
+whim = lowpass(whim, 0.3) * env(len(whim), 0.03, 0.15, 1.5)
+nose = drng.standard_normal(int(SR * d))
+nose = (resonate(nose, 450, 300) + 0.5 * resonate(nose, 1100, 500)) * env(int(SR * d), 0.08, 0.65, 1.3)
+save("collie_sigh", mix((0, whim * 0.35), (0.1, lowpass(nose, 0.3))), 0.4)
+d = 1.1                                                   # a yawn: a squeaky whine that opens up, then closes and falls
+yv = vocal(d, track([(0, 520), (0.35, 820), (0.75, 560), (d, 380)], d),
+           [(track([(0, 500), (0.35, 850), (0.9, 450)], d), 170, 1.0),
+            (track([(0, 1200), (0.35, 1450), (0.9, 800)], d), 240, 0.45), (2700, 450, 0.1)], breath=0.3)
+save("collie_yawn", lowpass(yv, 0.3) * env(len(yv), 0.12, 0.35, 1.3), 0.3)

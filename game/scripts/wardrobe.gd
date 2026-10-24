@@ -21,6 +21,7 @@ var items := {}                          ## id -> WearItem
 func _ready() -> void:
 	position = AT
 	z_index = 0
+	add_child(basket_sprite("basket"))
 	for id in ITEMS:
 		var it := WearItem.new()
 		it.id = id
@@ -30,28 +31,15 @@ func _ready() -> void:
 		it.home()
 
 
-func _draw() -> void:
-	draw_basket(self)
-
-
-static func draw_basket(c: CanvasItem) -> void:
-	## a woven basket with a handle (this one, and the things-to-place basket at the pond)
-	c.draw_set_transform(Vector2(0, -6), 0.0, Vector2(1.0, 0.42))
-	c.draw_circle(Vector2.ZERO, 62.0, Color(0.42, 0.27, 0.16, 0.28))
-	c.draw_set_transform(Vector2.ZERO)
-	c.draw_arc(Vector2(0, -28), 52.0, PI * 1.08, PI * 1.92, 24, Color("b98652"), 6.0, true)
-	var body := PackedVector2Array([Vector2(-60, -22), Vector2(60, -22), Vector2(46, 12), Vector2(-46, 12)])
-	c.draw_colored_polygon(body, Color("d9a86a"))
-	for k in 4:
-		var y := -16.0 + k * 8.0
-		var half := 58.0 - k * 4.0
-		c.draw_line(Vector2(-half, y), Vector2(half, y), Color("b98652"), 2.0, true)
-	for k in 9:
-		var x := -48.0 + k * 12.0
-		c.draw_line(Vector2(x * 1.08, -22), Vector2(x * 0.85, 12), Color("c4925a"), 1.5, true)
-	c.draw_set_transform(Vector2(0, -22), 0.0, Vector2(1.0, 0.25))
-	c.draw_arc(Vector2.ZERO, 60.0, 0.0, TAU, 32, Color("b98652"), 6.0, true)
-	c.draw_set_transform(Vector2.ZERO)
+static func basket_sprite(art: String) -> Sprite2D:
+	## the woven basket with a handle, rendered in 3D where it stands (art/generators/meadow3d.py); its origin is the
+	## basket's place
+	var s := Sprite2D.new()
+	s.texture = load("res://art/meadow3d/%s.png" % art)
+	s.centered = false
+	s.scale = Vector2.ONE * 0.5
+	s.offset = Vector2(-160, -192)               # texture at 2x
+	return s
 
 
 func release(it: WearItem, p: Vector2) -> void:
@@ -167,9 +155,13 @@ class WearItem:
 	var wearer: Creature
 	var _press := Vector2.ZERO
 	var _moved := false
+	var _sprite := Sprite2D.new()
 
 	func _ready() -> void:
 		touch_priority = 35
+		_sprite.texture = load("res://art/meadow3d/wear_%s.png" % id)   # rendered in 3D, at 2x, centred on its spot
+		_sprite.scale = Vector2.ONE * 0.5
+		add_child(_sprite)
 
 	func place() -> String:
 		return Wardrobe.ITEMS[id]["place"]
@@ -177,7 +169,7 @@ class WearItem:
 	func home(animate := false) -> void:
 		state = "basket"
 		wearer = null
-		queue_redraw()
+		_sprite.visible = true
 		z_index = 2
 		var spot: Vector2 = Wardrobe.ITEMS[id]["spot"]
 		if animate:
@@ -190,7 +182,7 @@ class WearItem:
 	func worn_by(c: Creature) -> void:
 		state = "worn"                         # drawn on the creature now, not here (but still there to be touched)
 		wearer = c
-		queue_redraw()
+		_sprite.visible = false             # drawn on the creature now
 
 	func hit_test(p: Vector2) -> bool:
 		match state:
@@ -225,39 +217,10 @@ class WearItem:
 	func _pick_up(p: Vector2) -> void:
 		state = "held"
 		wearer = null
-		queue_redraw()
+		_sprite.visible = true
 		z_index = 85
 		Sfx.play("pickup")
 		var t := create_tween()
 		t.tween_property(self, "scale", Vector2.ONE * 1.2, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		t.tween_property(self, "scale", Vector2.ONE, 0.1)
 		touch_move(p)
-
-	func _draw() -> void:
-		if state == "worn":
-			return
-		match id:
-			"crown":
-				draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.55))
-				draw_arc(Vector2.ZERO, 22.0, 0.0, TAU, 28, Color("8cc78a"), 4.0, true)
-				draw_set_transform(Vector2.ZERO)
-				for k in 6:
-					var a := TAU * k / 6.0 + 0.3
-					var c := Vector2(cos(a) * 22.0, sin(a) * 12.0)
-					draw_circle(c, 7.0, Wardrobe.FLOWERS[k % Wardrobe.FLOWERS.size()])
-					draw_circle(c, 2.6, Color("ffe08a"))
-			"scarf":
-				draw_set_transform(Vector2(0, -6), 0.0, Vector2(1.0, 0.5))
-				draw_arc(Vector2.ZERO, 20.0, 0.0, TAU, 28, Color("c9a8f0"), 10.0, true)
-				draw_set_transform(Vector2.ZERO)
-				var end := PackedVector2Array([Vector2(8, -2), Vector2(20, -2), Vector2(24, 26), Vector2(12, 26)])
-				draw_colored_polygon(end, Color("c9a8f0"))
-				for k in 3:
-					draw_line(Vector2(13 + k * 4, 26), Vector2(13 + k * 4, 32), Color("fff1c9"), 2.0, true)
-				draw_line(Vector2(9, 6), Vector2(21, 6), Color("fff1c9"), 2.0, true)
-			"bow":
-				for side in [-1.0, 1.0]:
-					var loop := PackedVector2Array([Vector2(0, 0), Vector2(18 * side, -12), Vector2(22 * side, 0), Vector2(18 * side, 12)])
-					draw_colored_polygon(loop, Color("f7a8c8"))
-					draw_line(Vector2(0, 2), Vector2(9 * side, 20), Color("f58fb6"), 4.0, true)
-				draw_circle(Vector2.ZERO, 6.0, Color("f58fb6"))

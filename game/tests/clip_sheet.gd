@@ -25,6 +25,13 @@ func _ready() -> void:
 	cv._layout()
 	await get_tree().create_timer(0.5).timeout
 	await _shot(out + "/close.png")
+	cv._zoom = 3.5                                   # the face, twice (a blink can land on one)
+	cv._layout()
+	for k in 2:
+		await get_tree().create_timer(0.6).timeout
+		await _shot(out + "/face-%d.png" % k)
+	cv._zoom = 2.0
+	cv._layout()
 	cv.play_clip("liedown")
 	await get_tree().create_timer(2.5).timeout
 	await _shot(out + "/close-sleep.png")
