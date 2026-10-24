@@ -6,7 +6,8 @@
 //              2 shown closed)
 //   CUSTOM1 = (glows, emission, surface: 0 lit 1 glossy 2 glowing, fur length along the surface)
 //   CUSTOM2 = (position at rest, fur layer height): fur strands keep their pattern however the creature moves
-//   CUSTOM3 = (which trait recolours it: -1 by hue (the fox), 0 none, 1 coat, 2 glow or mane; -, -, -)
+//   CUSTOM3 = (which trait recolours it: -1 by hue (the fox), 0 none, 1 coat, 2 glow or mane; the long-haired collie's
+//              combed direction packed in one number (fur.gdshader), else 0; -, -)
 
 uniform float eyes_closed = 0.0;
 
