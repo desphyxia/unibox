@@ -169,6 +169,7 @@ func wear(id: String) -> String:
 	worn[place] = id
 	look.model.wear(place, Wardrobe.model(id, look.model.place_size(place)))
 	Log.event("item_worn", id)
+	meadow.story.collect("dressed", "items", id, self, 1.4)
 	_sfx("chirp2", 1.1)
 	Fx.sparkles(meadow.fx, worn_at(place), 6, 40)
 	return old
@@ -230,6 +231,7 @@ func drink() -> void:
 	busy = true
 	target = null
 	Log.event("drink", who)
+	meadow.story.moment("drink", self, {}, 1.0)
 	await _settle()
 	var pond: Pond = meadow.pond
 	var lap := func(i: int):
@@ -282,6 +284,7 @@ func _play_ball() -> void:
 	var ball := _play_with
 	_play_with = null
 	Log.event("play_ball", who)
+	meadow.story.moment("ball", self, {}, 0.35)
 	if is_instance_valid(ball) and ball.has_method("roll") and randf() < 0.5:
 		ball.roll()                        # sometimes it nudges it on
 	Fx.hearts(meadow.fx, head_world() + Vector2(0, -30), 2)
@@ -401,6 +404,7 @@ func fall_asleep() -> void:
 	await play_clip("liedown", 12.0)
 	_play("sleep", true)
 	Log.event("creature_sleep", "")
+	meadow.story.moment("bedtime", self, {"hour": meadow.time.hour}, 1.5)
 	busy = false
 
 
@@ -436,6 +440,7 @@ func tuck_in() -> void:
 	Sfx.play("chime", 1.3, 0.03, -8.0)
 	Fx.hearts(meadow.fx, head_world() + Vector2(0, -20), 2, 30)
 	Log.event("tuck_in", who)
+	meadow.story.collect("bedtime", "tucked", who, self, 1.4)
 
 
 func bedtime() -> void:
@@ -545,6 +550,7 @@ func eat(apple: Node2D, how: String) -> void:
 	target = null
 	busy = true
 	Log.event("food_given", how)
+	meadow.story.moment("meal", self, {"how": how}, 0.7)
 	if _react_tween:
 		_react_tween.kill()
 	apple.z_index = 70
@@ -640,6 +646,8 @@ func _grow_step(delta: float) -> void:
 func _grew(to_stage: String) -> void:
 	## a little moment: it stretches up, sparkles and chirps (a bit deeper each time)
 	Log.event("creature_grew", "%s=%s" % [who, to_stage])
+	if to_stage == "grown" and who.begins_with("baby"):
+		meadow.story.moment("grown_" + who, self, {}, 1.2)
 	if to_stage == "grown":
 		look.model.shells = 6                  # an adult's fur
 	if asleep:

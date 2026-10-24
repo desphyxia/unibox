@@ -127,6 +127,8 @@ func _ready() -> void:
 	await wait(0.5)
 	print("WORN after ", c.worn)
 	await shot("bow-off")
+	c.hungry = false                        # no hunger cue at the pond: it would keep the fox from drinking
+	c._hunger_at = c._age + 300.0
 	# the pond: the signpost sends it along the path, and the view follows
 	await tap(w(Vector2(944, 444)))
 	await until(func(): return main.area == "pond" and c.target == null and Creature.area_at(c.position.x) == "pond", 15.0)
@@ -296,6 +298,7 @@ func _ready() -> void:
 	await wait(1.0)
 	print("GROWN ", baby.stage(), " scale %.3f of %.3f, voice %.2f, fur %d" % [baby.base_scale, main.CREATURE_SCALE, baby.voice, baby.look.model.shells])
 	await shot("baby-grown")
+	await wait(1.5)                                  # its storybook picture is taken first
 	# the comparison: rendered fox and live 3D fox
 	main.open_compare()
 	await wait(1.5)
@@ -333,6 +336,8 @@ func _ready() -> void:
 	await shot("compare-speed")
 	main.compare.close()
 	await wait(0.3)
+	main.story.save_pictures(out + "/story")
+	print("STORY %d pages, grab ms %s" % [main.story.pages.size(), main.story.grab_ms])
 	print("AUTOPLAY DONE log=", ProjectSettings.globalize_path(Log.path))
 	get_tree().quit()
 

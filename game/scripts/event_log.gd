@@ -2,6 +2,8 @@ extends Node
 ## The playtest's local event log (docs/first-ten-minutes.md section 3): one tab-separated line per event, on the device
 ## only, read by hand. No network, no identifiers: seconds since session start, variant, creature kind, event, detail.
 
+signal logged(ev: String, detail: String)   ## every event, as it is written (the storybook counts some)
+
 var path := ""
 var _file: FileAccess
 var _start_ms := 0
@@ -29,6 +31,7 @@ func event(ev: String, detail := "") -> void:
 	if _file:
 		_file.store_line(line)
 		_file.flush()
+	logged.emit(ev, detail)
 
 
 func read_all() -> String:

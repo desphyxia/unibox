@@ -31,6 +31,7 @@ var _selected: Creature                     ## the creature touched last: a tap 
 var tag: NameTag
 var time: IslandTime
 var ui: ParentUI
+var story: Story                            ## the storybook's moments and pictures, this session
 var sky: SkyButton                          ## the sun or moon in the corner: switches between day and night
 var _spots_used := {}
 var _active: Touchable = null
@@ -57,6 +58,9 @@ func _ready() -> void:
 	ui = ParentUI.new()
 	add_child(ui)
 	ui.new_session_requested.connect(_new_session)
+	story = Story.new()
+	story.main = self
+	add_child(story)
 	ui.time_speed_changed.connect(func(s): time.speed = s)
 	var sky_layer := CanvasLayer.new()
 	sky_layer.layer = 5
@@ -179,6 +183,7 @@ func _build_world() -> void:
 				c.look_up()
 				get_tree().create_timer(randf_range(0.3, 1.2)).timeout.connect(func(): if is_instance_valid(c) and not c.busy and not c.asleep: c.pet(c.head_world())))
 	weather.rain_stopped.connect(func():
+		story.moment("rainbow", null, {"place": area}, 6.0, Vector2(pan + BASE.x / 2.0, BASE.y / 2.0), BASE)
 		get_tree().create_timer(3.5).timeout.connect(func():
 			for c in creatures:
 				if is_instance_valid(c) and not c.asleep:
@@ -335,6 +340,7 @@ func _on_hatched(at: Vector2) -> void:
 	creature = spawn_creature(Traits.defaults(), 1.0, at + Vector2(0, 24), Game.temperament)
 	_selected = creature
 	creature.appear(at + Vector2(0, 24))
+	story.moment("hatch", creature, {"taps": egg.taps, "kind": Game.kind, "temperament": Game.temperament}, 2.6)
 	breeding.start()
 	tag = add_tag(creature)
 	tag.set_text(Game.creature_name)

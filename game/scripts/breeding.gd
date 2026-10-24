@@ -22,6 +22,7 @@ var babies := 0
 var _clock := 0.0
 var _egg: Egg
 var _baby_traits := {}
+var _baby_from := {}                   ## which parent gave each of the baby's traits (0 the child's creature, 1 the friend)
 var _nest_glow := Sprite2D.new()
 var _glow_on := 0.0
 var _t := 0.0
@@ -79,6 +80,7 @@ func _on_walk_ended(who: Creature) -> void:
 		state = State.READY
 		Sfx.play("chime", 1.0, 0.0, -6.0)
 		Fx.sparkles(main.fx, main.NEST_AT + Vector2(0, -30), 8, 90, Color(1, 0.9, 0.97))
+		main.story.moment("friend", partner, partner.traits, 0.8, (partner.position + partner.head_world()) / 2.0 + Vector2(-120, 0), Story.WIDE)
 		return
 	if state != State.READY:
 		return
@@ -121,6 +123,7 @@ func _pair() -> void:
 	var mid: Vector2 = (a.head_world() + b.head_world()) / 2.0
 	Sfx.play(Sfx.voiced(Game.kind, "happy"), 1.0)
 	Fx.hearts(main.fx, mid + Vector2(0, -10), 5, 50)
+	main.story.moment("pair", null, {}, 0.6, mid + Vector2(0, 40), Story.WIDE)
 	b.play_clip("happy", 12.0)
 	await a.play_clip("happy", 12.0)
 	Fx.hearts(main.fx, mid + Vector2(0, -30), 3, 30)
@@ -148,8 +151,10 @@ func _lay_egg() -> void:
 	main.open_picker([main.creature, partner], _on_traits_chosen)
 
 
-func _on_traits_chosen(t: Dictionary, _sources: Dictionary) -> void:
+func _on_traits_chosen(t: Dictionary, sources: Dictionary) -> void:
 	_baby_traits = t
+	_baby_from = sources
+	main.story.moment("egg", null, {"traits": t.duplicate(), "from": sources.duplicate()}, 0.9, main.NEST_AT + Vector2(0, -60), Story.WIDE)
 	state = State.EGG
 	_egg.locked = false
 	_egg.glow.self_modulate = Traits.swatch("glow", t["glow"]).lightened(0.35)
@@ -168,6 +173,7 @@ func _on_baby_hatched(at: Vector2) -> void:
 	baby.grow_up(main.CREATURE_SCALE, GROW_SECONDS)
 	main.add_tag(baby)
 	Log.event("egg_hatch_second", "%s,%s" % [_baby_traits["coat"], _baby_traits["glow"]])
+	main.story.moment("hatch_" + baby.who, baby, {"traits": _baby_traits.duplicate(), "from": _baby_from.duplicate()}, 2.6)
 	_egg = null
 	main.creature.home = null
 	if babies >= MAX_BABIES:
