@@ -106,7 +106,7 @@ func _build_world() -> void:
 		c.z_index = -11
 		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		world.add_child(c)
-	for b in [["res://art/meadow3d/meadow.png", Vector2(-512, -128)], ["res://art/meadow/meadow_east.svg", Vector2(1536, -128)]]:
+	for b in [["res://art/meadow3d/meadow.png", Vector2(-512, -128)], ["res://art/meadow3d/meadow_east.png", Vector2(1536, -128)]]:
 		var back := Sprite2D.new()
 		back.texture = load(b[0])
 		back.centered = false

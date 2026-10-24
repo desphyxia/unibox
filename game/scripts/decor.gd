@@ -8,7 +8,7 @@ extends Node2D
 const AT := Vector2(1940, 704)           ## the basket, in meadow coordinates (bottom right of the pond)
 const ITEMS := {
 	"plant": {"spot": Vector2(-34, -30), "foot": Vector2(50, 116), "art": "plant"},
-	"lantern": {"spot": Vector2(2, -40), "foot": Vector2(40, 136), "art": "lantern"},
+	"lantern": {"spot": Vector2(2, -40), "foot": Vector2(40, 136), "art": "lantern2"},
 	"ball": {"spot": Vector2(36, -24), "foot": Vector2(32, 60), "art": "ball"},
 }
 const AREA := Rect2(1040, 520, 1000, 245)   ## where things can be placed (the pond's grass)
@@ -19,7 +19,7 @@ var items := {}
 
 func _ready() -> void:
 	position = AT
-	add_child(Wardrobe.basket_sprite())
+	add_child(Wardrobe.basket_sprite("basket_east"))
 	for id in ITEMS:
 		var it := DecorItem.new()
 		it.id = id
@@ -28,11 +28,6 @@ func _ready() -> void:
 		add_child(it)
 		it.home()
 
-
-func _draw() -> void:
-	draw_set_transform(Vector2(0, -6), 0.0, Vector2(1.0, 0.42))   # its shadow (the pond's backdrop is still drawn)
-	draw_circle(Vector2.ZERO, 62.0, Color(0.42, 0.27, 0.16, 0.28))
-	draw_set_transform(Vector2.ZERO)
 
 
 func place(it: DecorItem, p: Vector2) -> void:
@@ -57,19 +52,25 @@ class DecorItem:
 	var state := "basket"
 	var sprite := Sprite2D.new()
 	var glow := Sprite2D.new()           ## the lantern's light at night
+	var shade := Sprite2D.new()          ## the ball's shadow (it stays put while the ball spins)
 	var _press := Vector2.ZERO
 	var _moved := false
 
 	func _ready() -> void:
 		touch_priority = 33
 		var info: Dictionary = DecorBasket.ITEMS[id]
-		sprite.texture = load("res://art/meadow/%s.svg" % info["art"])
+		# rendered in 3D (art/generators/meadow3d.py) on the canvas of the drawing it replaced, at 2x
+		sprite.texture = load("res://art/meadow3d/%s.png" % info["art"])
 		sprite.centered = false
 		sprite.offset = -(info["foot"] as Vector2) * 2.0
+		if id == "ball":
+			shade.texture = Fx.glow_texture(Color(0.33, 0.3, 0.4, 0.5), 64)
+			shade.position = Vector2(0, -1)
+			add_child(shade)
 		add_child(sprite)
 		if id == "lantern":
 			glow.texture = Fx.glow_texture(Color(1.0, 0.86, 0.5, 0.9), 256)
-			glow.position = Vector2(0, -50)
+			glow.position = Vector2(0, -86)        # the lantern's glass
 			glow.modulate.a = 0.0
 			glow.show_behind_parent = true
 			add_child(glow)
@@ -171,6 +172,8 @@ class DecorItem:
 		basket.meadow.ball_moved(self, to)
 
 	func _process(_delta: float) -> void:
+		if id == "ball":
+			shade.scale = Vector2(1.5, 0.4) * absf(sprite.scale.y)   # as big as the ball (small in the basket)
 		if id == "lantern":
 			var dark: float = basket.meadow.time.darkness() if basket.meadow and basket.meadow.time else 0.0
 			var on := dark if state != "basket" else dark * 0.5
