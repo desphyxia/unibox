@@ -94,7 +94,7 @@ func choose(i: int) -> void:
 	Log.event("kind_chosen", kind)
 	var view: CreatureView = b["view"]
 	view.model.play("happy")
-	Sfx.play("happy", 1.05, 0.03)
+	Sfx.play(Sfx.voiced(kind, "happy"), 1.05, 0.03)
 	var n: Node2D = b["node"]
 	Fx.hearts(meadow.fx if meadow else self, world_pos() + n.position + Vector2(0, -40), 3, 50.0)
 	# the others drift up and pop

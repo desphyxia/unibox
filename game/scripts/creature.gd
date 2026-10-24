@@ -118,7 +118,7 @@ func set_traits(t: Dictionary) -> void:
 
 
 func _sfx(id: String, pitch := 1.0, vary := 0.06, db := 0.0) -> void:
-	Sfx.play(id, pitch * voice, vary, db)
+	Sfx.play(Sfx.voiced(look.model.get_meta("kind", "fox") if look else "fox", id), pitch * voice, vary, db)
 
 
 func depth_scale() -> float:

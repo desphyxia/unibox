@@ -138,7 +138,9 @@ only that they fit. `godot --path . res://tests/speed_run.tscn -- SECONDS [OUT_D
   The signposts' pictures (a drop of water, a little apple tree; `icon_water.png`, `icon_tree.png`) are rendered the
   same way, without shadows, as they bob on the boards. Only the heart, sparkle and paw are still drawings
   (`art/generators/meadow.py`).
-- The sounds are synthesised (`art/generators/sfx.py`).
+- The sounds are synthesised (`art/generators/sfx.py`). The collie has its own voice (`sfx/collie_*.wav`: a soft
+  "wuf" for the chirp, little yips, happy yips with a pant, a sigh through the nose, a squeaky yawn); a creature plays
+  its kind's own version of a sound where there is one (`Sfx.voiced`), else the shared one.
 - The music is made from code (`art/generators/music.py`): a day tune (76 beats a minute: a warm pad, a soft bass and a
   music-box melody over Fmaj7, Dm7, Bbmaj7, Csus4, Fmaj7, Am7, Bbmaj7, C7) and a slower, lower night lullaby on the
   same chords, each a seamless loop of 16 bars. `scripts/music.gd` plays both and crossfades them with island time (the
