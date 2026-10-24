@@ -39,6 +39,7 @@ func place(it: DecorItem, p: Vector2) -> void:
 	at = Pond.shore(at)
 	it.placed_at(at)
 	Log.event("decor_placed", it.id)
+	meadow.story.collect("placed", "items", it.id, null, 1.2, at + Vector2(0, -50))
 	if it.id == "ball":
 		meadow.ball_moved(it)
 

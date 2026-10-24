@@ -68,6 +68,10 @@ Each session writes a tab-separated event log on the device. In the parent area,
 a **Copy all** button; this works on the iPad too, where the log sits in the browser's storage. The log holds no
 name and no identifiers.
 
+The game also keeps the session's story for the storybook (`scripts/story.gd`, `docs/storybook.md`): the first
+hatch, meal, dressing up, drink, ball game, rainbow, bedtime, friend, egg and babies, each with a small picture of
+that moment, in memory only. The parent area doesn't show it yet (step 2).
+
 ## Live 3D foxes
 Every fox is the same 3D model, a standard Godot scene (`creatures/fox/fox.scn`): a Skeleton3D with 44 bones (body,
 head, ears, six along each tail, hip, knee and paw for each leg, the foxfires, and neck helpers), a skinned "Skin" and
