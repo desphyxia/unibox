@@ -271,7 +271,12 @@ func _frame(tm: float, name: String) -> Dictionary:
 		"turn", "turn_stand":
 			var e := u * u * u * (u * (6.0 * u - 15.0) + 10.0)
 			var mid := pow(sin(PI * u), 2.0)
-			_add(f, "root", _r(Vector3.UP, -deg_to_rad(TURN_DEG) * e * sg))
+			var spin := _r(Vector3.UP, -deg_to_rad(TURN_DEG) * e * sg)
+			_add(f, "root", spin)
+			# round the model's own middle, as the game turns it once the clip ends (the root bone need not sit there:
+			# the collie's is 0.58 back, and turning round it made the dog jump sideways at the end)
+			var pivot: Vector3 = bones[bone["root"]]["rest"].origin
+			f["move"]["root"] = spin * pivot - pivot
 			f["move"]["body"] = Vector3(0, 0.1 * mid, 0)
 			_add(f, "head", _r(Vector3.UP, -sg * 0.15 * sin(TAU * u)))
 			for t in 4:
