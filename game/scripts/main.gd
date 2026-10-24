@@ -268,6 +268,17 @@ func ball_moved(ball: Node2D, to = null) -> void:
 func _start_session() -> void:
 	Log.start_session()
 	Sfx.play("sparkle", 0.8, 0.0, -6.0)
+	if Game.pick in KindChooser.KINDS:
+		Game.kind = Game.pick
+	else:                                  # the child picks: three bubbles over the nest, the egg waits
+		egg.locked = true
+		var chooser := KindChooser.new()
+		chooser.meadow = self
+		chooser.egg_at = NEST_AT + Vector2(0, 22)
+		world.add_child(chooser)
+		chooser.chosen.connect(func(_k: String):
+			egg.locked = false
+			egg.knock_hint())
 	# a test entry for checking the web build from a computer: the page address ending in #check opens the 3D fox check
 	# in close-up (children never see it; there is no link to it)
 	if OS.has_feature("web") and str(JavaScriptBridge.eval("window.location.hash")) == "#check":

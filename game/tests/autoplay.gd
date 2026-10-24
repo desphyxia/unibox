@@ -17,10 +17,16 @@ func _ready() -> void:
 	Game.variant = "A"
 	Game.temperament = "playful"
 	Game.creature_name = ""
-	Game.kind = args[1] if args.size() > 1 else "fox"
+	var kind: String = args[1] if args.size() > 1 else "fox"
+	Game.pick = "child"                    # the child picks: tap that kind's bubble
 	main = load("res://main.tscn").instantiate()
 	add_child(main)
-	await wait(1.5)
+	await wait(2.2)
+	await shot("choose")
+	await tap(w(KindChooser.SPOTS[KindChooser.KINDS.find(kind)]))
+	await wait(0.6)
+	await shot("chosen")
+	await wait(2.4)
 	await shot("egg")
 	for i in 4:
 		await tap(w(Vector2(512, 545)))

@@ -248,10 +248,10 @@ func open_panel() -> void:
 	for v in [["A", "A: visible needs"], ["B", "B: no visible needs"]]:
 		var b := _button(r1, v[1], func(): _apply_setting("variant", v[0]), Game.variant == v[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_label(box, "Creature (from the next session)", 18)
+	_label(box, "First creature (from the next session)", 18)
 	var rk := _row(box)
-	for k in [["fox", "Fox"], ["unicorn", "Unicorn"], ["collie", "Collie"]]:
-		var b := _button(rk, k[1], func(): _apply_setting("kind", k[0]), Game.kind == k[0])
+	for k in [["child", "Child picks"], ["fox", "Fox"], ["unicorn", "Unicorn"], ["collie", "Collie"]]:
+		var b := _button(rk, k[1], func(): _apply_setting("pick", k[0]), Game.pick == k[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_label(box, "Temperament", 18)
 	var r2 := _row(box)
