@@ -19,6 +19,7 @@ var items := {}
 
 func _ready() -> void:
 	position = AT
+	add_child(Wardrobe.basket_sprite())
 	for id in ITEMS:
 		var it := DecorItem.new()
 		it.id = id
@@ -29,7 +30,9 @@ func _ready() -> void:
 
 
 func _draw() -> void:
-	Wardrobe.draw_basket(self)
+	draw_set_transform(Vector2(0, -6), 0.0, Vector2(1.0, 0.42))   # its shadow (the pond's backdrop is still drawn)
+	draw_circle(Vector2.ZERO, 62.0, Color(0.42, 0.27, 0.16, 0.28))
+	draw_set_transform(Vector2.ZERO)
 
 
 func place(it: DecorItem, p: Vector2) -> void:

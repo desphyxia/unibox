@@ -9,11 +9,11 @@ var _t := 0.0
 
 func _ready() -> void:
 	_glow.texture = Fx.glow_texture(Color(1.0, 0.86, 0.5, 0.9), 256)
-	_glow.position = Vector2(0, -50)
+	_glow.position = Vector2(0, -86)                 # the lamp, in meadow3d's lantern
 	_glow.modulate.a = 0.0
 	add_child(_glow)
 	var s := Sprite2D.new()
-	s.texture = load("res://art/meadow/lantern.svg")
+	s.texture = load("res://art/meadow3d/lantern.png")
 	s.centered = false
 	s.scale = Vector2.ONE * 0.5
 	s.offset = -Vector2(40, 136) * 2.0

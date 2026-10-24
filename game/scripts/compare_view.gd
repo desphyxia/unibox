@@ -52,7 +52,7 @@ func _ready() -> void:
 	root.gui_input.connect(_gui_input)
 	add_child(root)
 	var bg := TextureRect.new()
-	bg.texture = load("res://art/meadow/meadow.svg")
+	bg.texture = load("res://art/meadow3d/meadow.png")
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE

@@ -106,9 +106,9 @@ func _build_world() -> void:
 		c.z_index = -11
 		c.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		world.add_child(c)
-	for b in [["meadow", Vector2(-512, -128)], ["meadow_east", Vector2(1536, -128)]]:
+	for b in [["res://art/meadow3d/meadow.png", Vector2(-512, -128)], ["res://art/meadow/meadow_east.svg", Vector2(1536, -128)]]:
 		var back := Sprite2D.new()
-		back.texture = load("res://art/meadow/%s.svg" % b[0])
+		back.texture = load(b[0])
 		back.centered = false
 		back.scale = Vector2.ONE * 0.5            # drawn at 2x for sharp Retina screens
 		back.position = b[1]
@@ -123,7 +123,7 @@ func _build_world() -> void:
 	tree.position = TREE_AT
 	world.add_child(tree)
 	var ts := Sprite2D.new()
-	ts.texture = load("res://art/meadow/tree.svg")
+	ts.texture = load("res://art/meadow3d/tree.png")
 	ts.centered = false
 	ts.scale = Vector2.ONE * 0.5
 	ts.offset = Vector2(-400, -940)               # foot of the trunk is the origin (texture at 2x)
@@ -143,7 +143,7 @@ func _build_world() -> void:
 			egg.hatched.connect(_on_hatched)
 			continue
 		var s := Sprite2D.new()
-		s.texture = load("res://art/meadow/nest_%s.svg" % part)
+		s.texture = load("res://art/meadow3d/nest_%s.png" % part)
 		s.centered = false
 		s.scale = Vector2.ONE * 0.5
 		s.offset = Vector2(-240, -100)
