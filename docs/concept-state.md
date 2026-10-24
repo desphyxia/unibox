@@ -231,3 +231,34 @@ Not in the gate (noted, not decided): response to creature needs, distress at ne
 - **2026-10-24: the collie's own voice.** It used the shared chirps. Now it has five sounds of its own, made from code like the others (a buzz shaped by the mouth's resonances, plus breath): a soft closed-mouth "wuf" when called or petted, a little double yip, happy yips followed by a pant, a sigh through the nose after a tiny whimper, and a squeaky yawn that rises and falls. A creature plays its kind's own version of a sound where there is one, else the shared one, so the fox and unicorn are unchanged; eating and drinking stay shared. About 60 KB in the download. Not yet listened to by a person.
 - **2026-10-24: a silkier coat for the collie.** In the game the collie's coat looked woolly next to the render: the fur's holes were round dots, so it read as velvet, and the coat's shape was smooth. Now the fur shader draws the long hair along the way it is combed (each point of the coat carries that direction): fine strands become streaks, the larger tufts become long locks with darker gaps between them (paler gaps in the white), and a hair highlight runs across the locks on the back and shoulders, as in the render. The coat's shape keeps more of its locks and they end in points, so the belly, the bottom of the ruff and the tail have ragged fringes. The face's short fur is unchanged, as are the fox and unicorn. The model is 1.01 MB (was 1.0). Speed on the desktop: one collie the same; five collies with full fur about 500 frames a second, from about 620, so the fur costs a little more on the iPad, still to be checked there. Still different from the render: its coat is darker and its ruff fuller and longer.
 - **Download budget (2026-10-21; the user asked to keep close track, since many animals are planned).** `python art/tools/size_report.py` lists every creature animation's frames, size and download. Measured: a fox frame is about 330x490 pixels (about one frame pixel per screen pixel on a Retina iPad), 150 KB as ASTC and about 94 KB on the wire, since GitHub Pages gzips the download. Before the left-facing frames the fox was 134 frames, 12.6 MB to download; with them it is 288 frames, about 30 MB (the left-facing frames are wider, since the tails sweep up behind the fox on that side). The whole web game downloads about 41 MB (31 MB game data plus the 10 MB engine). The Godot engine itself is 10 MB (gzipped). Basis Universal was tested on the idle loop and rejected for now: 73 KB a frame at a mild setting, only about 22% less than gzipped ASTC, with slight blockiness in the fur and eyes (worse at stronger settings). What will matter as animals are added: (1) download each animal's frames when the child first meets it, not all at start; (2) make trait and colour variants by recolouring in the game, not by rendering every variant; (3) keep each animal's clip list and frame counts close to the fox's; (4) if needed, frames at about 85% size save about 28%, to be checked on an iPad.
+
+### 12h. Creature habitats and islands (2026-10-23 and 2026-10-24)
+
+**Four habitats.** Every creature kind belongs to one habitat: **land**, **sea**, **air** or **amphibious** (at home both on land and in water, such as frogs, crocodiles, seals and penguins). The user asked for land, sea and air, then added amphibious. In the game the list lives in `game/scripts/game_state.gd` (`HABITATS`, `KIND_HABITAT`), and the parent area's creature picker shows one row per habitat.
+
+**Current kinds:** fox, unicorn and collie are land. The unicorn stays land, not air, because its wings are an optional trait. The sea-horse (art only so far) goes in sea when it comes into the game. Air and amphibious have no creature yet.
+
+**Habitats are zones on every island, not one habitat per island.** Each island is land surrounded by sea and open to the sky, so it holds all four:
+- **Land:** the meadow.
+- **Amphibious:** the pond and the shore.
+- **Sea:** the water round the island (a dock or a shallow reef).
+- **Air:** treetops, cliffs or a cloud perch.
+
+**Why:** the free first island must carry the whole loop, so no habitat may sit only behind a purchase. Breeding is same-kind only, so kinds need no separate islands. The pond already gives the land-and-water edge.
+
+**Paid islands** may lean toward one habitat (a coral island with a big reef, a mountain island with tall cliffs) but are never the only home of a habitat.
+
+**Prototype scope:** the scope rule allows about 2 places. Meadow (land) and pond (amphibious) are built. Sea and air are each a new place, so the next one to add is **sea**, which lets the sea-horse in.
+
+**The next creatures (planned 2026-10-24; none built yet).** The user asked for a plan for the next 10 kinds, then added the axolotl and kept all 11. Most go to the habitats that have no creature yet, and the list mixes real and magical animals, as the fox spirit and unicorn do.
+
+| Habitat | Kinds | Why |
+|---|---|---|
+| Sea | sea-horse, narwhal, sea turtle | the sea-horse's art exists and sea is the next place; the narwhal is the "unicorn of the sea"; turtle eggs hatch on the beach |
+| Air | owl, baby dragon, parrot | the owl fits night, lanterns and bedtime; a dragon is a magical flyer children love; the parrot's colours suit breeding |
+| Amphibious | frog, otter, penguin, axolotl | the frog and axolotl live at the pond; the otter plays on the shore; the penguin waddles and swims. A real axolotl never leaves the water, but it lives in the pond, the amphibious zone |
+| Land | bunny | a small, soft first pet for ages 4-6 |
+
+- **Download:** sea-horse, narwhal, sea turtle, frog, axolotl and dragon have smooth skin, not fur, so they should be smaller and quicker to build (check with `art/tools/size_report.py`).
+- **Breeding traits to keep in mind:** the axolotl's colour morphs (pink, gold, white, wild-dark) and its feathery gills; the parrot's plumage colours.
+- **Suggested order:** sea-horse, then frog, then owl, so each empty habitat gets a creature early. Not decided.
