@@ -3,6 +3,7 @@ extends CanvasLayer
 ## Everything for grown-ups, behind a parental gate: a quiet corner button (press and hold), a question a young child
 ## can't read, then the parent area (name, needs variant, temperament, island-time speed, new session, log file).
 ## Tapping the creature's name tag goes through the same gate straight to the name field.
+## The storybook (open_book) shows the session's story (story.gd, story_text.gd): a cover, a page per moment, an end.
 
 signal new_session_requested
 signal time_speed_changed(speed: float)
@@ -23,6 +24,13 @@ var _modal: Control
 var _name_edit: LineEdit
 var _naming: Creature = null           ## whose name the field edits (null: the child's first creature, Game.creature_name)
 var _time_speed := 1.0
+var story: Story                       ## main.gd sets it
+var _book_font: FontVariation
+var _book_title: FontVariation
+var _book_seen := {}                   ## the pages looked at since the book was opened (for the log)
+var _swipe_from = null
+var book_at := -1                      ## the page open in the storybook (-1: closed)
+var book_photo: Control                ## its picture (a swipe on it turns the page)
 
 
 func _ready() -> void:
@@ -130,11 +138,13 @@ func _button(box: Control, text: String, cb: Callable, on := false) -> Button:
 	b.text = text
 	b.custom_minimum_size = Vector2(0, 52)
 	b.add_theme_font_size_override("font_size", 20)
-	for state in ["normal", "hover", "pressed", "focus"]:
+	for state in ["normal", "hover", "pressed", "focus", "disabled"]:
 		var sb := StyleBoxFlat.new()
 		sb.set_corner_radius_all(14)
 		sb.set_content_margin_all(10)
 		sb.bg_color = ACCENT if on else Color(0.95, 0.9, 0.9)
+		if state == "disabled":
+			sb.bg_color = Color(0.95, 0.9, 0.9, 0.45)
 		if state == "pressed":
 			sb.bg_color = sb.bg_color.darkened(0.12)
 		if state == "focus":
@@ -145,6 +155,7 @@ func _button(box: Control, text: String, cb: Callable, on := false) -> Button:
 	b.add_theme_color_override("font_color", Color.WHITE if on else INK)
 	b.add_theme_color_override("font_hover_color", Color.WHITE if on else INK)
 	b.add_theme_color_override("font_pressed_color", Color.WHITE if on else INK)
+	b.add_theme_color_override("font_disabled_color", Color(INK, 0.3))
 	b.pressed.connect(cb)
 	box.add_child(b)
 	return b
@@ -158,6 +169,7 @@ func _row(box: Control) -> HBoxContainer:
 
 
 func _close() -> void:
+	book_at = -1
 	if _modal:
 		_modal.queue_free()
 		_modal = null
@@ -244,6 +256,9 @@ func open_panel() -> void:
 	_naming = null                         # the parent area's name field is the child's first creature
 	var box := _panel_box(620)
 	_label(box, "Parent area", 26, ACCENT)
+	var pages := story.pages.size() if story else 0
+	var sb := _button(box, "Storybook (%s)" % ("%d %s" % [pages, "page" if pages == 1 else "pages"] if pages > 0 else "starts at the hatch"), func(): open_book(0), true)
+	sb.custom_minimum_size.y = 60
 	_label(box, "Creature's name", 18)
 	_name_field(box)
 	_label(box, "Needs (playtest variant)", 18)
@@ -297,6 +312,9 @@ func open_panel() -> void:
 		compare_requested.emit())
 	var r4 := _row(box)
 	var ns := _button(r4, "New session (next child)", func():
+		if story and not story.pages.is_empty():
+			_confirm_new_session()
+			return
 		_close()
 		new_session_requested.emit())
 	ns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -341,3 +359,183 @@ func _apply_setting(key: String, value: String) -> void:
 	Game.set_setting(key, value)
 	Log.event("setting", "%s=%s" % [key, value])
 	open_panel()
+
+
+func _confirm_new_session() -> void:
+	## the book lives only in this session: say so before it goes
+	var box := _panel_box(560)
+	_label(box, "Start a new session?", 26, ACCENT)
+	var words := StoryText.new(story)
+	_label(box, "This clears %s storybook (%d pages). It isn't kept anywhere else." % [words._own(words.name_of("first")), story.pages.size()], 19)
+	var row := _row(box)
+	var keep := _button(row, "Keep playing", _close)
+	keep.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var look := _button(row, "Open the storybook", func(): open_book(0))
+	look.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var go := _button(box, "Clear it and start a new session", func():
+		Log.event("storybook_cleared", "pages=%d" % story.pages.size())
+		_close()
+		new_session_requested.emit(), true)
+	go.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+# ------------------------------------------------------------------ the storybook
+func _fonts() -> void:
+	if _book_font:
+		return
+	var f: FontFile = load("res://fonts/MeadowBook.ttf")
+	f.fallbacks = [ThemeDB.fallback_font]      # names in other scripts still show
+	var wght := TextServerManager.get_primary_interface().name_to_tag("wght")
+	_book_font = FontVariation.new()
+	_book_font.base_font = f
+	_book_font.variation_opentype = {wght: 420}
+	_book_title = FontVariation.new()
+	_book_title.base_font = f
+	_book_title.variation_opentype = {wght: 640}
+
+
+func _book_text(box: Control, text: String, size: int, title := false, width := 0.0) -> Label:
+	var l := _label(box, text, size)
+	l.add_theme_font_override("font", _book_title if title else _book_font)
+	l.add_theme_constant_override("line_spacing", 4)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER if title else HORIZONTAL_ALIGNMENT_LEFT
+	if width > 0.0:
+		l.custom_minimum_size.x = width
+		l.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	return l
+
+
+func book_pages() -> int:
+	## the cover, a page per moment, and the end (just the cover while the story hasn't begun)
+	return 1 if story == null or story.pages.is_empty() else story.pages.size() + 2
+
+
+func open_book(i := 0) -> void:
+	## one page as a spread: the picture on the left, the words on the right (the game is always landscape)
+	_fonts()
+	var first_open := _modal == null or not _modal.has_meta("book")
+	if first_open:
+		_book_seen = {}
+		Log.event("storybook_opened", "pages=%d" % (story.pages.size() if story else 0))
+	var total := book_pages()
+	i = clampi(i, 0, total - 1)
+	_book_seen[i] = true
+	var words := StoryText.new(story)
+	var view := get_viewport().get_visible_rect().size
+	const TEXT_W := 300.0
+	var ph := minf(420.0, view.y - 280.0)
+	var pw := minf(ph / 0.75, view.x - 160.0 - TEXT_W)
+	ph = pw * 0.75
+	var box := _panel_box(pw + TEXT_W + 40.0)
+	_modal.set_meta("book", true)
+	book_at = i
+	var top := _row(box)
+	var tl := _label(top, "Storybook", 16, Color(ACCENT, 0.9))
+	tl.autowrap_mode = TextServer.AUTOWRAP_OFF
+	tl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var pn := _label(top, "%d of %d" % [i + 1, total], 16, Color(INK, 0.55))
+	pn.autowrap_mode = TextServer.AUTOWRAP_OFF
+	var spread := HBoxContainer.new()
+	spread.add_theme_constant_override("separation", 22)
+	box.add_child(spread)
+	var pic: Texture2D = null
+	var title := ""
+	var text := ""
+	if story == null or story.pages.is_empty():
+		title = "Storybook"
+		text = "The story begins when the egg hatches. Every first moment after that gets a page with its own picture."
+	elif i == 0:
+		title = words.cover_title()
+		pic = _cover_picture()
+		text = words.cover_line()
+	elif i == total - 1:
+		title = "The end, for now"
+		pic = _last_picture()
+		text = words.closing_text()
+	else:
+		pic = story.picture(story.pages[i - 1])
+		text = words.page_text(i - 1)
+	book_photo = _photo(pic, Vector2(pw, ph), i)
+	spread.add_child(book_photo)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 14)
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.custom_minimum_size.x = TEXT_W
+	spread.add_child(col)
+	if title != "":
+		var t := _book_text(col, title, 32, true, TEXT_W)
+		t.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	if text != "":
+		_book_text(col, text, 23, false, TEXT_W)
+	var nav := _row(box)
+	var back := _button(nav, "Previous", func(): open_book(i - 1))
+	back.disabled = i == 0
+	back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var next := _button(nav, "Next", func(): open_book(i + 1), i < total - 1)
+	next.disabled = i >= total - 1
+	next.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var done := _button(nav, "Close", func():
+		Log.event("storybook_closed", "seen=%d of %d" % [_book_seen.size(), total])
+		open_panel())
+	done.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+func _photo(tex, size: Vector2, i: int) -> Control:
+	## the picture, framed like a print pasted in a book; a swipe turns the page
+	var frame := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color.WHITE
+	sb.set_content_margin_all(8)
+	sb.set_corner_radius_all(6)
+	sb.shadow_color = Color(0.25, 0.12, 0.2, 0.18)
+	sb.shadow_size = 8
+	sb.shadow_offset = Vector2(0, 3)
+	frame.add_theme_stylebox_override("panel", sb)
+	frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	var r := TextureRect.new()
+	r.texture = tex if tex else _blank_print()
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+	r.custom_minimum_size = size
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.add_child(r)
+	frame.mouse_filter = Control.MOUSE_FILTER_STOP
+	frame.gui_input.connect(func(e: InputEvent):
+		if e is InputEventMouseButton and e.button_index == MOUSE_BUTTON_LEFT:
+			if e.pressed:
+				_swipe_from = e.position
+			elif _swipe_from != null:
+				var dx: float = e.position.x - _swipe_from.x
+				_swipe_from = null
+				if absf(dx) > 70.0:
+					open_book(i + (1 if dx < 0.0 else -1)))
+	return frame
+
+
+func _blank_print() -> Texture2D:
+	var g := GradientTexture2D.new()
+	g.gradient = Gradient.new()
+	g.gradient.set_color(0, Color(0.98, 0.93, 0.9))
+	g.gradient.set_color(1, Color(0.93, 0.95, 0.88))
+	g.fill_to = Vector2(1, 1)
+	return g
+
+
+func _cover_picture() -> Texture2D:
+	## the child's first creature: dressed up if it was, else hatched, else its latest picture
+	for key in ["dressed", "hatch"]:
+		var d := story.page(key)
+		if not d.is_empty() and not d["jpg"].is_empty():
+			return story.picture(d)
+	for k in range(story.pages.size() - 1, -1, -1):
+		var p: Dictionary = story.pages[k]
+		if p["who"] == "first" and not p["jpg"].is_empty():
+			return story.picture(p)
+	return _last_picture()
+
+
+func _last_picture() -> Texture2D:
+	for k in range(story.pages.size() - 1, -1, -1):
+		if not story.pages[k]["jpg"].is_empty():
+			return story.picture(story.pages[k])
+	return null

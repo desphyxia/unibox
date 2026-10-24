@@ -61,6 +61,7 @@ func _ready() -> void:
 	story = Story.new()
 	story.main = self
 	add_child(story)
+	ui.story = story
 	ui.time_speed_changed.connect(func(s): time.speed = s)
 	var sky_layer := CanvasLayer.new()
 	sky_layer.layer = 5

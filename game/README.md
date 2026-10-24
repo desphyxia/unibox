@@ -70,7 +70,9 @@ name and no identifiers.
 
 The game also keeps the session's story for the storybook (`scripts/story.gd`, `docs/storybook.md`): the first
 hatch, meal, dressing up, drink, ball game, rainbow, bedtime, friend, egg and babies, each with a small picture of
-that moment, in memory only. The parent area doesn't show it yet (step 2).
+that moment, in memory only. **Storybook**, the first button in the parent area, shows it as a book: a cover, a
+page per moment with its picture and a sentence or two, and an ending; Previous and Next or a swipe turn the page.
+**New session** warns first when there is a story, since the book isn't kept.
 
 ## Live 3D foxes
 Every fox is the same 3D model, a standard Godot scene (`creatures/fox/fox.scn`): a Skeleton3D with 44 bones (body,
