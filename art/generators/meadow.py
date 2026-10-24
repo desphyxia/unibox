@@ -13,7 +13,7 @@ import math, os, random, sys
 OUT = sys.argv[1] if len(sys.argv) > 1 else "meadow"
 os.makedirs(OUT, exist_ok=True)
 rnd = random.Random(11)
-USED = {"heart.svg", "sparkle.svg", "paw.svg", "icon_water.svg", "icon_tree.svg"}
+USED = {"heart.svg", "sparkle.svg", "paw.svg"}
 
 
 def blob(cx, cy, rx, ry, jitter=0.16, n=10, rot=0.0):
