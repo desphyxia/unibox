@@ -132,6 +132,10 @@ def build_head():
 
 # ================================================================== the coat: the body's skin wrapped in the hair's bulk
 KIND_R = {0: (0.014, 0.009), 1: (0.026, 0.013), 3: (0.014, 0.008), 4: (0.024, 0.012), 9: (0.014, 0.008)}   # root, tip
+TIP = float(os.environ.get("COAT_TIP", "0.3"))                 # the tips' thickness, as a share of the above: the locks
+                                                              # end in points, as the coat's fringes do in the render
+BLURS = int(os.environ.get("COAT_BLURS", "1"))                 # how much the locks melt into one another and the body
+MELT = float(os.environ.get("COAT_MELT", "0.012"))
 KIND_LEN = {0: 0.8, 1: 1.0, 3: 0.6, 4: 1.0}                   # the bulk a little shorter than the hair (it lies flatter)
 
 
@@ -177,6 +181,7 @@ def splat(Pg, kind, lo, shape, h):
     n, K = Pg.shape[:2]
     for i in range(n):
         r0, r1 = KIND_R[int(kind[i])]
+        r1 = r1 * TIP
         rad = r0 + (r1 - r0) * np.linspace(0, 1, K)
         for k in range(K - 1):
             a, b, ra, rb = Pg[i, k], Pg[i, k + 1], rad[k], rad[k + 1]
@@ -221,8 +226,8 @@ def build_coat():
     Q = np.stack([X.ravel(), Y.ravel(), Z.ravel()], 1)
     Fb = D.body_sdf(Q).reshape(shape).astype(np.float32)
     Fh = head_world_sdf(Q).reshape(shape).astype(np.float32)
-    F = smin(Fb, Fe, 0.025)
-    for _ in range(3):
+    F = smin(Fb, Fe, MELT)
+    for _ in range(BLURS):
         F = blur(F)
     F = np.maximum(F, -(Fh + 0.012))                          # hollow inside the head: the head has its own mesh
     check_box(F)

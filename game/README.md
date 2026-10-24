@@ -80,7 +80,9 @@ clip. Things to wear (`scripts/wardrobe.gd`, made in code) sit at places the bui
 head, the ribbon round the neck and a tail near its tip, each carried by its bone and placed for every pose. Fur is shell fur: the furry skin plus 6 thin copies
 of it (4 for babies) stacked in one mesh and lifted along the fur when the game starts, so the skeleton carries them
 (the web renderer gives shaders no tangents, so the fur can't be grown in the shader), with holes cut by a small stored
-noise texture (`creatures/shaders/`). Coat
+noise texture (`creatures/shaders/`). The collie's long hair is drawn along the way it is combed (packed into each point
+by `tools/build_collie.gd`): the noise is averaged along the hair, so strands are streaks and tufts are locks with
+darker gaps, and a hair highlight runs across the locks; the fox and unicorn keep round strands. Coat
 and glow colours are worked out by the shaders, so a new colour costs no download. The fox is about 1.1 MB to download.
 
 **The unicorn** (`creatures/unicorn/unicorn.scn`, about 1.3 MB) is the new one built from scratch

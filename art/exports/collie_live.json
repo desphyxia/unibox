@@ -219,25 +219,25 @@
  ],
  "groups": {
   "lit": {
-   "verts": 13382,
+   "verts": 13267,
    "stride": 26,
    "tris": 26598,
    "vert_offset": 0,
-   "index_offset": 1391728
+   "index_offset": 1379768
   },
   "gloss": {
    "verts": 5119,
    "stride": 26,
    "tris": 10007,
-   "vert_offset": 1710904,
-   "index_offset": 2243280
+   "vert_offset": 1698944,
+   "index_offset": 2231320
   },
   "emit": {
    "verts": 42,
    "stride": 26,
    "tris": 40,
-   "vert_offset": 2363364,
-   "index_offset": 2367732
+   "vert_offset": 2351404,
+   "index_offset": 2355772
   }
  },
  "attr": [
@@ -266,7 +266,7 @@
  },
  "ground": [
   0.0,
-  0.0097,
+  0.006,
   0.0
  ],
  "places": {
