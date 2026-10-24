@@ -7,6 +7,16 @@ signal settings_changed
 const SAVE_PATH := "user://prototype.cfg"
 const TEMPERAMENTS := ["calm", "playful", "curious"]
 
+## Where each kind of creature lives. Amphibious is for animals at home both on land and in water (frogs, crocodiles,
+## seals, penguins). Every kind belongs to exactly one habitat; a habitat can be empty until its first creature is made.
+const HABITATS := ["land", "sea", "air", "amphibious"]
+const HABITAT_NAMES := {"land": "Land", "sea": "Sea", "air": "Air", "amphibious": "Amphibious"}
+const KIND_HABITAT := {
+	"fox": "land",
+	"unicorn": "land",         # its wings are an optional trait, so it stays a land creature
+	"collie": "land",
+}
+
 var variant := "A"            ## "A": visible needs (cues), "B": no visible needs
 var kind := "fox"             ## the kind of creature that hatches: "fox" or "unicorn" (creatures/<kind>/)
 var temperament := "playful"
@@ -32,6 +42,18 @@ func save() -> void:
 	cfg.set_value("session", "music", music)
 	cfg.set_value("creature", "name", creature_name)
 	cfg.save(SAVE_PATH)
+
+
+static func habitat_of(k: String) -> String:
+	## the habitat a kind of creature lives in ("land" for a kind not listed yet)
+	return KIND_HABITAT.get(k, "land")
+
+
+static func kinds_in(habitat: String, among: Array = []) -> Array:
+	## the kinds (from among, in its order; every listed kind if empty) that live in a habitat
+	if among.is_empty():
+		among = KIND_HABITAT.keys()
+	return among.filter(func(k): return habitat_of(k) == habitat)
 
 
 func set_creature_name(n: String) -> void:

@@ -249,10 +249,16 @@ func open_panel() -> void:
 		var b := _button(r1, v[1], func(): _apply_setting("variant", v[0]), Game.variant == v[0])
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_label(box, "Creature (from the next session)", 18)
-	var rk := _row(box)
-	for k in [["fox", "Fox"], ["unicorn", "Unicorn"]]:
-		var b := _button(rk, k[1], func(): _apply_setting("kind", k[0]), Game.kind == k[0])
-		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	for h in Game.HABITATS:                 # one row per habitat that has a creature to offer
+		var kinds: Array = Game.kinds_in(h, ["fox", "unicorn"])
+		if kinds.is_empty():
+			continue
+		var rk := _row(box)
+		var hl := _label(rk, Game.HABITAT_NAMES[h], 16)
+		hl.custom_minimum_size.x = 120
+		for k in kinds:
+			var b := _button(rk, k.capitalize(), func(): _apply_setting("kind", k), Game.kind == k)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_label(box, "Temperament", 18)
 	var r2 := _row(box)
 	for t in Game.TEMPERAMENTS:
