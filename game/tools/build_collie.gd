@@ -176,8 +176,10 @@ func _lying(f: Dictionary, sit: float, down: float, rest: float) -> void:
 	_add(f, "neck_1", _r(ACROSS, -0.42 * rest))
 	_add(f, "head", _r(ACROSS, 0.42 * rest) * _r(Vector3.RIGHT, 0.08 * rest))
 	_jaw(f, 0.9 * rest)
-	_add(f, "ear_0", _r(Vector3.RIGHT, 0.25 * rest))
-	_add(f, "ear_1", _r(Vector3.RIGHT, -0.25 * rest))
+	# the ears fold back flat over the head (left upright, whichever ear was further from the camera stood out past the
+	# lowered face); ear_0 is the one on the near side when the dog faces right, ear_1 the other
+	_add(f, "ear_0", _r(ACROSS, 1.8 * rest) * _r(Vector3.RIGHT, -0.5 * rest))
+	_add(f, "ear_1", _r(ACROSS, 2.8 * rest) * _r(Vector3.RIGHT, 1.2 * rest))
 	var lift := float(meta.get("tail_lie", 0.6))       # the tail lifts to lie along the ground behind, and curls round
 	for t in 4:
 		_add(f, "tail_%d" % t, _r(Vector3.UP, -0.35 * rest) * _r(ACROSS, (-0.9 if t == 0 else -0.15) * maxf(sit, down) * lift))
