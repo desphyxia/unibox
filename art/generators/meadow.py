@@ -4,12 +4,16 @@ sparkle, paw tag icon). Same watercolour language as backdrop_bloom.py: soft was
 
 World coordinates: the guaranteed-visible area is 1024x768; the backdrop covers 2048x1024 around it (x -512..1536,
 y -128..896) so wider phones and tablets in either orientation see more meadow, never an edge.
+Since round 37 the meadow, the pond and the props are rendered in 3D (meadow3d.py); this script still draws the small
+things the game uses (heart, sparkle, paw, the two sign pictures) and writes only those. Its other drawings stay here
+as the layout the 3D scene follows.
 Usage: python meadow.py OUT_DIR"""
 import math, os, random, sys
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "meadow"
 os.makedirs(OUT, exist_ok=True)
 rnd = random.Random(11)
+USED = {"heart.svg", "sparkle.svg", "paw.svg", "icon_water.svg", "icon_tree.svg"}
 
 
 def blob(cx, cy, rx, ry, jitter=0.16, n=10, rot=0.0):
@@ -57,6 +61,8 @@ class Svg:
         self.body.append(s)
 
     def save(self, name):
+        if name not in USED:                                   # replaced by the 3D renders (meadow3d.py)
+            return
         x, y, w, h = self.box
         open(os.path.join(OUT, name), "w", encoding="utf-8").write(
             f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="{x} {y} {w} {h}"><defs>{"".join(self.defs)}</defs>{"".join(self.body)}</svg>')

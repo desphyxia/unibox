@@ -2,21 +2,21 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dak362rxg1yo2"
-path="res://.godot/imported/nest_back.svg-0cb2a1966607594a574b254af067b451.ctex"
+uid="uid://nr7r8j0wn55e"
+path="res://.godot/imported/lantern2_lit.png-ad3b8f862b01f0a5ab2ebb29d502218d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/meadow/nest_back.svg"
-dest_files=["res://.godot/imported/nest_back.svg-0cb2a1966607594a574b254af067b451.ctex"]
+source_file="res://art/meadow3d/lantern2_lit.png"
+dest_files=["res://.godot/imported/lantern2_lit.png-ad3b8f862b01f0a5ab2ebb29d502218d.ctex"]
 
 [params]
 
 compress/mode=0
-compress/high_quality=true
+compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=2.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false
